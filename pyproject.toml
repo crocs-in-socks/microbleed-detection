@@ -1,0 +1,23 @@
+[project]
+name = "microbleednet"
+version = "2.0.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "natsort>=8.4.0",
+    "nibabel>=5.4.2",
+    "numpy>=2.2.6",
+    "pydantic>=2.12.5",
+    "pyyaml>=6.0.3",
+    "rich>=14.3.3",
+    "torch>=2.11.0",
+    "typer>=0.24.1",
+]
+
+[project.scripts]
+microbleednet = "microbleednet.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.11.6,<0.12.0"]
+build-backend = "uv_build"
