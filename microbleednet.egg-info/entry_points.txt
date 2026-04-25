@@ -1,3 +1,0 @@
-[console_scripts]
-microbleednet = microbleednet.console_commands.microbleednet:main
-
