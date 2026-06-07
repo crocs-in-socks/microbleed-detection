@@ -17,3 +17,8 @@ class TransformConstants:
     FRST_FACTOR_STD = 0.1
     FRST_BRIGHT = True
     FRST_DARK = False
+
+    # Augmentation parameters
+    AUGMENTATION_TRANSLATION_OFFSET_RANGE = (-15, 15) # voxels
+    AUGMENTATION_NOISE_VARIANCE_RANGE = (0.01, 0.04)
+    AUGMENTATION_BLUR_SIGMA_RANGE = (0.1, 0.2) # voxels

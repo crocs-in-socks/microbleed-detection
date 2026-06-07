@@ -1,21 +1,151 @@
 from pathlib import Path
 
+import torch
+import numpy as np
+from torch.utils.data import DataLoader
+from scipy.ndimage import gaussian_filter
+from sklearn.model_selection import train_test_split
+
 from microbleednet.core import utils
-from microbleednet.core import preprocess
+from microbleednet.core.common import preprocess
+from microbleednet.core.engines.trainers import Trainer
+from microbleednet.core.engines.tasks import SegmentationTask
+from microbleednet.core.common.models import CandidateDetector
+from microbleednet.core.dataloading.samplers import EqualBatchSampler
+from microbleednet.core.dataloading.datasets import SegmentationPatchDataset
 
 def main():
-    input_path = Path("/home/gouri/workspace/ephemeral/swan_COG0432.nii.gz")
-    label_path = Path("/home/gouri/workspace/ephemeral/mIP_swan_COG0432_allSlices_mask.nii.gz")
+    inputs = [
+        Path("/home/gouri/workspace/ephemeral/samples/preprocessed/volumes/volume_0.nii.gz"),
+        Path("/home/gouri/workspace/ephemeral/samples/preprocessed/volumes/volume_1.nii.gz")
+    ]
+    labels = [
+        Path("/home/gouri/workspace/ephemeral/samples/preprocessed/masks/mask_0.nii.gz"),
+        Path("/home/gouri/workspace/ephemeral/samples/preprocessed/masks/mask_1.nii.gz")
+    ]
 
-    volume = utils.load_volume(input_path)
-    mask = utils.load_volume(label_path)
+    subjects = list(zip(inputs, labels))
 
-    output_volume, output_mask, bounding_box = preprocess.run(volume, mask, True, True, True, True, True)
+    # constants
+    device = torch.device("cuda")
+    pin_memory = True
+    train_proportion = 0.8
+    random_state = 42
+    num_workers = 4
+    batch_size = 2
+    patch_size = 48
+    augmentation_factor = 10
+    optimizer_parameters = {
+        "lr": 1e-3,
+        "eps": 1e-4,
+    }
+    scheduler_parameters = {
+        "milestones": [2, 4, 6],
+        "gamma": 0.1,
+    }
 
-    output_volume = utils.numpy_to_nifti(output_volume, volume)
-    output_path = Path("/home/gouri/workspace/ephemeral/preprocessed_volume.nii.gz")
-    utils.save_volume(output_volume, output_path)
-    
-    output_mask = utils.numpy_to_nifti(output_mask, mask)
-    output_mask_path = Path("/home/gouri/workspace/ephemeral/preprocessed_mask.nii.gz")
-    utils.save_volume(output_mask, output_mask_path)
+    train_subjects, test_subjects = train_test_split(subjects, train_size=train_proportion, random_state=random_state)
+
+    train_patch_path = Path("/home/gouri/workspace/ephemeral/samples/patches/train")
+    train_patches = get_patches(train_subjects, train_patch_path, patch_size, augmentation_factor)
+    train_set = SegmentationPatchDataset(train_patches, perform_augmentation=True)
+    train_sampler = EqualBatchSampler(train_patches, batch_size=batch_size)
+    train_loader = DataLoader(
+        dataset=train_set,
+        batch_sampler=train_sampler,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+    )
+
+    test_patch_path = Path("/home/gouri/workspace/ephemeral/samples/patches/test")
+    test_patches = get_patches(test_subjects, test_patch_path, patch_size, augmentation_factor)
+    test_set = SegmentationPatchDataset(test_patches)
+    test_loader = DataLoader(
+        dataset=test_set,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+    )
+
+    model = CandidateDetector(2, 2, 64).to(device)
+    task = SegmentationTask()
+    trainer = Trainer(model, device, optimizer_parameters, scheduler_parameters, task)
+
+    trainer.fit(train_loader, test_loader, num_epochs=10)
+
+
+def get_patches(subjects, patch_directory, patch_size, augmentation_factor):
+    patch_directory.mkdir(parents=True, exist_ok=True)
+    patches = []
+    global_patch_idx = 0
+    for subject in subjects:
+        volume_path, mask_path = subject
+
+        volume = utils.load_volume(volume_path)
+        volume = utils.nifti_to_numpy(volume)
+        volume_patches = utils.get_nonoverlapping_patches(volume, patch_size)
+
+        mask = utils.load_volume(mask_path)
+        mask = utils.nifti_to_numpy(mask)
+        mask_patches = utils.get_nonoverlapping_patches(mask, patch_size)
+
+        volume_has_microbleed = np.sum(mask) > 0
+
+        voxel_weights = gaussian_filter(mask, 1.2) * 10
+        voxel_weights_patches = utils.get_nonoverlapping_patches(voxel_weights, patch_size)
+
+        subject_patches = zip(volume_patches, mask_patches, voxel_weights_patches)
+
+        for idx, (input_patch, label_patch, voxel_weights_patch) in enumerate(subject_patches):
+            patch_path = patch_directory / f"patch_{global_patch_idx:06d}.npz"  # Use global index
+            global_patch_idx += 1
+            np.savez_compressed(
+                patch_path,
+                volume=input_patch,
+                mask=label_patch,
+                voxel_weights=voxel_weights_patch,
+            )
+
+            has_microbleed = np.sum(label_patch) > 0
+
+            patches.extend(
+                [
+                    {
+                        "patch_path": str(patch_path.resolve()),
+                        "has_microbleed": bool(has_microbleed),
+                        "is_augmented": version != 0,
+                    }
+                    for version in range(augmentation_factor)
+                ]
+            )
+
+    return patches
+
+
+
+def temp_preprocess():
+    inputs = [
+        Path("/home/gouri/workspace/ephemeral/samples/raw/volumes/swan_COG0432.nii.gz"),
+        Path("/home/gouri/workspace/ephemeral/samples/raw/volumes/swan_COG0894.nii.gz")
+    ]
+    labels = [
+        Path("/home/gouri/workspace/ephemeral/samples/raw/masks/mIP_swan_COG0432_allSlices_mask.nii.gz"),
+        Path("/home/gouri/workspace/ephemeral/samples/raw/masks/mIP_swan_COG0894_allSlices_mask.nii.gz")
+    ]
+
+    raw_subjects = zip(inputs, labels)
+    for idx, raw_subject in enumerate(raw_subjects):
+        input_volume_path, label_mask_path = raw_subject
+        volume = utils.load_volume(input_volume_path)
+        mask = utils.load_volume(label_mask_path)
+
+        output_volume, output_mask, bounding_box = preprocess.run(volume, mask, True, True, True, True, True)
+
+        output_volume = utils.numpy_to_nifti(output_volume, volume)
+        output_volume_path = Path(f"/home/gouri/workspace/ephemeral/samples/preprocessed/volumes/volume_{idx}.nii.gz")
+        utils.save_volume(output_volume, output_volume_path)
+
+        output_mask = utils.numpy_to_nifti(output_mask, mask)
+        output_mask_path = Path(f"/home/gouri/workspace/ephemeral/samples/preprocessed/masks/mask_{idx}.nii.gz")
+        utils.save_volume(output_mask, output_mask_path)

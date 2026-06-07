@@ -1,5 +1,4 @@
 import os
-import torch
 import tempfile
 import subprocess
 import numpy as np
