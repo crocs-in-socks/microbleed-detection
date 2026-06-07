@@ -24,8 +24,8 @@ def apply(volume: np.ndarray) -> np.ndarray:
     vessel_mask = get_volume_vessel_mask(volume)
     vessel_mask = binary_dilation(vessel_mask, iterations=1)
 
-    temp = utils.numpy_to_nifti(vessel_mask, utils.numpy_to_nifti(volume))
-    utils.save_volume(temp, Path("/home/gouri/workspace/ephemeral/vessel_mask.nii.gz"))
+    # temp = utils.numpy_to_nifti(vessel_mask, utils.numpy_to_nifti(volume))
+    # utils.save_volume(temp, Path("/home/gouri/workspace/ephemeral/vessel_mask.nii.gz"))
 
     inpainted_volume = inpaint_with_neighborhood_mean(volume, vessel_mask)
 
