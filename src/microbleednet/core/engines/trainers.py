@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import torch
 import torch.nn as nn
 from torch import optim
@@ -17,11 +19,15 @@ class Trainer:
         device: torch.device,
         optimizer_parameters: dict,
         scheduler_parameters: dict,
-        task: BaseTask
+        task: BaseTask,
+        checkpoint_dir: Path
     ):
         self.model = model
         self.device = device
         self.task = task
+        
+        checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        self.checkpoint_dir = checkpoint_dir
 
         self.clip_norm = optimizer_parameters.pop("clip_norm", 1.0)
 
@@ -43,9 +49,12 @@ class Trainer:
 
             print(f"Epoch {epoch+1:03d}/{num_epochs:03d} | Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}")
             
-            if val_loss < self.best_val_loss:
+            is_best = val_loss < self.best_val_loss 
+            if is_best:
                 self.best_val_loss = val_loss
                 print("--> Checkpoint saved!")
+
+            self.save_checkpoint(epoch, is_best)
 
     def train_epoch(self, dataloader: DataLoader) -> float:
         self.model.train()
@@ -68,4 +77,21 @@ class Trainer:
         self.scheduler.step()
 
         return average_loss
+
+    def save_checkpoint(self, epoch: int, is_best: bool) -> None:
+        state = {
+            "epoch": epoch,
+            "model_state_dict": self.model.state_dict(),
+            "optimizer_state_dict": self.optimizer.state_dict(),
+            "scheduler_state_dict": self.scheduler.state_dict(),
+            "scaler_state_dict": self.scaler.state_dict(),
+            "best_val_loss": self.best_val_loss
+        }
+
+        latest_path = self.checkpoint_dir / "latest_model.pth"
+        torch.save(state, latest_path)
+
+        if is_best:
+            best_path = self.checkpoint_dir / "best_model.pth"
+            torch.save(self.model.state_dict(), best_path)
 

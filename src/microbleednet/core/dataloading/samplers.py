@@ -9,8 +9,6 @@ class EqualBatchSampler(Sampler):
         self.pos_indices = [i for i, patch in enumerate(patches) if patch.get("has_microbleed")]
         self.neg_indices = [i for i, patch in enumerate(patches) if not patch.get("has_microbleed")]
 
-        print(f"Total Patches: {len(patches)}, Positive: {len(self.pos_indices)}, Negative: {len(self.neg_indices)}")
-
         self.n_pos = self.batch_size // 2
         self.n_neg = self.batch_size // 2
         self.num_batches = len(self.pos_indices) // self.n_pos
