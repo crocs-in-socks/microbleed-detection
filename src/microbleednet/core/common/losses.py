@@ -42,3 +42,17 @@ class DetectorLoss(nn.Module):
 
         return dice_loss + cross_entropy_loss
 
+class DiscriminatorTeacherLoss(nn.Module):
+    """
+    dice loss + weighted voxel-wise cross entropy loss + binary cross entropy
+    """
+    def __init__(self, dice_smooth=1.0):
+        super().__init__()
+        self.segmentation_loss = DetectorLoss(dice_smooth)
+        self.classification_loss = nn.BCEWithLogitsLoss()
+
+    def forward(self, classification_logits, classification_target, segmentation_logits, segmentation_target, voxel_weights=None):
+        segmentation_loss = self.segmentation_loss(segmentation_logits, segmentation_target, voxel_weights)
+        classification_loss = self.classification_loss(classification_logits, classification_target)
+
+        return segmentation_loss + classification_loss

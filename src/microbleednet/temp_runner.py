@@ -9,12 +9,80 @@ from sklearn.model_selection import train_test_split
 from microbleednet.core import utils
 from microbleednet.core.common import preprocess
 from microbleednet.core.engines.trainers import Trainer
-from microbleednet.core.engines.tasks import SegmentationTask
-from microbleednet.core.common.models import CandidateDetector
+from microbleednet.core.engines.tasks import SegmentationTask, SegmentationClassificationTask
+from microbleednet.core.common.models import CandidateDetector, CandidateDiscriminatorTeacher
 from microbleednet.core.dataloading.samplers import EqualBatchSampler
-from microbleednet.core.dataloading.datasets import SegmentationPatchDataset
+from microbleednet.core.dataloading.datasets import SegmentationPatchDataset, SegmentationClassificationPatchDataset
 
 def main():
+    inputs = [
+        Path("/home/gouri/workspace/ephemeral/samples/preprocessed/volumes/volume_0.nii.gz"),
+        Path("/home/gouri/workspace/ephemeral/samples/preprocessed/volumes/volume_1.nii.gz")
+    ]
+    labels = [
+        Path("/home/gouri/workspace/ephemeral/samples/preprocessed/masks/mask_0.nii.gz"),
+        Path("/home/gouri/workspace/ephemeral/samples/preprocessed/masks/mask_1.nii.gz")
+    ]
+
+    subjects = list(zip(inputs, labels))
+
+    # constants
+    device = torch.device("cuda")
+    pin_memory = True
+    train_proportion = 0.8
+    random_state = 42
+    num_workers = 4
+    batch_size = 2
+    patch_size = 24
+    augmentation_factor = 10
+    optimizer_parameters = {
+        "lr": 1e-3,
+        "eps": 1e-4,
+    }
+    scheduler_parameters = {
+        "milestones": [2, 4, 6],
+        "gamma": 0.1,
+    }
+    checkpoint_dir = Path("/home/gouri/workspace/ephemeral/samples/checkpoints")
+
+    train_subjects, test_subjects = train_test_split(subjects, train_size=train_proportion, random_state=random_state)
+
+    train_patch_path = Path("/home/gouri/workspace/ephemeral/samples/patches/train")
+    train_patches = get_patches(train_subjects, train_patch_path, patch_size, augmentation_factor)
+    train_set = SegmentationClassificationPatchDataset(train_patches, perform_augmentation=True)
+    train_sampler = EqualBatchSampler(train_patches, batch_size=batch_size)
+    train_loader = DataLoader(
+        dataset=train_set,
+        batch_sampler=train_sampler,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+    )
+
+    test_patch_path = Path("/home/gouri/workspace/ephemeral/samples/patches/test")
+    test_patches = get_patches(test_subjects, test_patch_path, patch_size, augmentation_factor)
+    test_set = SegmentationClassificationPatchDataset(test_patches)
+    test_loader = DataLoader(
+        dataset=test_set,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+    )
+    
+    # model = CandidateDetector(2, 2, 64).to(device)
+    # task = SegmentationTask()
+    # trainer = Trainer(model, device, optimizer_parameters, scheduler_parameters, task)
+
+    # trainer.fit(train_loader, test_loader, num_epochs=10)
+
+    model = CandidateDiscriminatorTeacher(2, 2, 64, 0.2).to(device)
+    task = SegmentationClassificationTask()
+    trainer = Trainer(model, device, optimizer_parameters, scheduler_parameters, task, checkpoint_dir)
+
+    trainer.fit(train_loader, test_loader, 10)
+
+
+def temp_train_detector():
     inputs = [
         Path("/home/gouri/workspace/ephemeral/samples/preprocessed/volumes/volume_0.nii.gz"),
         Path("/home/gouri/workspace/ephemeral/samples/preprocessed/volumes/volume_1.nii.gz")
