@@ -8,7 +8,7 @@ from torch.amp import GradScaler
 from torch.utils.data import DataLoader
 from torch.nn.utils import clip_grad_norm_
 
-from microbleednet.core.engines.tasks import BaseTask
+from microbleednet.core.common.tasks import BaseTask
 from microbleednet.core.engines.evaluators import Evaluator
 
 
@@ -26,7 +26,6 @@ class Trainer:
         self.device = device
         self.task = task
         
-        checkpoint_dir.mkdir(parents=True, exist_ok=True)
         self.checkpoint_dir = checkpoint_dir
 
         self.clip_norm = optimizer_parameters.pop("clip_norm", 1.0)
@@ -42,12 +41,16 @@ class Trainer:
 
         self.evaluator = Evaluator(self.model, self.device, self.task)
 
-    def fit(self, train_loader: DataLoader, val_loader: DataLoader, num_epochs: int):
-        for epoch in range(num_epochs):
+    def fit(self, train_loader: DataLoader, val_loader: DataLoader, n_epochs: int, checkpoint_path: Path = None, weights_only: bool = False):
+        start_epoch = 0
+        if checkpoint_path:
+            start_epoch = self.load_checkpoint(checkpoint_path, weights_only)
+
+        for epoch in range(start_epoch, n_epochs):
             train_loss = self.train_epoch(train_loader)
             val_loss = self.evaluator.evaluate(val_loader)
 
-            print(f"Epoch {epoch+1:03d}/{num_epochs:03d} | Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}")
+            print(f"Epoch {epoch+1:03d}/{n_epochs:03d} | Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}")
             
             is_best = val_loss < self.best_val_loss 
             if is_best:
@@ -95,3 +98,33 @@ class Trainer:
             best_path = self.checkpoint_dir / "best_model.pth"
             torch.save(self.model.state_dict(), best_path)
 
+    def load_checkpoint(self, checkpoint_path: Path, weights_only: bool):
+        if not checkpoint_path.is_file():
+            print(f"No checkpoint found at {checkpoint_path.resolve()}. Starting training from scratch.")
+            return 0
+
+        print(f"Loading checkpoint from: {checkpoint_path.resolve()}.")
+        checkpoint = torch.load(checkpoint_path, map_location=self.device)
+
+        if weights_only:
+            # If the file is a full state dict, extract just the model weights.
+            # If it's already just raw weights, use it directly.
+            state_dict = checkpoint.get("model_state_dict", checkpoint)
+            missing, unexpected = self.model.load_state_dict(state_dict, strict=False)
+            print("Loaded model weights only. Starting from epoch 0.")
+
+            if missing or unexpected:
+                print(f"Note: Some keys did not match perfectly.")
+
+            return 0
+
+        self.model.load_state_dict(checkpoint["model_state_dict"])
+        self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        self.scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
+        self.scaler.load_state_dict(checkpoint["scaler_state_dict"])
+        self.best_val_loss = checkpoint["best_val_loss"]
+        
+        start_epoch = checkpoint["epoch"] + 1 
+        print(f"Successfully restored full state. Resuming from epoch {start_epoch}.")
+        
+        return start_epoch

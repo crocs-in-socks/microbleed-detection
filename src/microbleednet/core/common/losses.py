@@ -19,6 +19,18 @@ class DiceLoss(nn.Module):
         return 1.0 - dice_coefficient.mean()
 
 
+class KnowledgeDistillationLoss(nn.Module):
+    def __init__(self, temperature):
+        super().__init__()
+        self.temperature = temperature
+    
+    def forward(self, teacher_logits, student_logits):
+        teacher_predictions = F.log_softmax(teacher_logits / self.temperature, dim=1)
+        student_predictions = F.log_softmax(student_logits / self.temperature, dim=1)
+
+        return F.kl_div(student_predictions, teacher_predictions, reduction="batchmean") # batchmean is for standard KL divergence
+    
+
 class DetectorLoss(nn.Module):
     """
     dice loss + weighted voxel-wise cross entropy loss
@@ -56,3 +68,20 @@ class DiscriminatorTeacherLoss(nn.Module):
         classification_loss = self.classification_loss(classification_logits, classification_target)
 
         return segmentation_loss + classification_loss
+
+class DiscriminatorStudentLoss(nn.Module):
+    """
+    weight_alpha * cross entropy loss + weight_beta * knowledge distillation loss
+    """
+    def __init__(self, alpha: float, beta: float, temperature: float):
+        super().__init__()
+        self.alpha = alpha
+        self.beta = beta
+        self.cross_entropy_loss = nn.CrossEntropyLoss()
+        self.knowledge_distillation_loss = KnowledgeDistillationLoss(temperature)
+    
+    def forward(self, teacher_logits, student_logits, target):
+        cross_entropy_loss = self.cross_entropy_loss(student_logits, target)
+        knowledge_distillation_loss = self.knowledge_distillation_loss(teacher_logits, student_logits)
+
+        return self.alpha * cross_entropy_loss + self.beta * knowledge_distillation_loss

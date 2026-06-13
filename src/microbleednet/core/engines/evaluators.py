@@ -3,7 +3,7 @@ import torch.nn as nn
 from torch.amp import autocast
 from torch.utils.data import DataLoader
 
-from microbleednet.core.engines.tasks import BaseTask
+from microbleednet.core.common.tasks import BaseTask
 
 
 class Evaluator:
