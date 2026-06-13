@@ -17,9 +17,9 @@ class SegmentationTask(BaseTask):
         self.criterion = losses.DetectorLoss()
 
     def training_step(self, model, device, batch):
-        x = batch.get("x").to(device, dtype=torch.float)
-        y = batch.get("y").to(device, dtype=torch.float)
-        weights = batch.get("weights").to(device, dtype=torch.float)
+        x = batch["x"].to(device, dtype=torch.float)
+        y = batch["y"].to(device, dtype=torch.float)
+        weights = batch["weights"].to(device, dtype=torch.float)
 
         x_frst = frst.apply(x)
         x = torch.cat((x, x_frst), dim=1) # Shape: (Batch, 2, H, W, D)
@@ -38,10 +38,10 @@ class SegmentationClassificationTask(BaseTask):
         self.criterion = losses.DiscriminatorTeacherLoss()
     
     def training_step(self, model, device, batch):
-        volume = batch.get("volume").to(device, dtype=torch.float)
-        mask = batch.get("mask").to(device, dtype=torch.float)
-        weights = batch.get("weights").to(device, dtype=torch.float)
-        label = batch.get("label").to(device, dtype=torch.float)
+        volume = batch["volume"].to(device, dtype=torch.float)
+        mask = batch["mask"].to(device, dtype=torch.float)
+        weights = batch["weights"].to(device, dtype=torch.float)
+        label = batch["label"].to(device, dtype=torch.float)
 
         volume_frst = frst.apply(volume)
         volume = torch.cat((volume, volume_frst), dim=1) # Shape: (Batch, 2, H, W, D)
@@ -62,8 +62,8 @@ class KnowledgeDistillationClassificationTask(BaseTask):
         self.teacher_model.eval()
     
     def training_step(self, student_model, device, batch):
-        x = batch.get("x").to(device, dtype=torch.float)
-        y = batch.get("y").to(device, dtype=torch.float)
+        x = batch["x"].to(device, dtype=torch.float)
+        y = batch["y"].to(device, dtype=torch.float)
 
         x_frst = frst.apply(x)
         x = torch.cat((x, x_frst), dim=1)

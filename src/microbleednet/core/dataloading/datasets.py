@@ -20,16 +20,17 @@ class BasePatchDataset(Dataset):
     def load_patch(self, idx: int):
 
         patch = self.patches[idx]
-        patch_path = patch.get("patch_path")
-        has_microbleed = patch.get("has_microbleed")
-        is_augmented = patch.get("is_augmented")
+        patch_path = patch["patch_path"]
+        has_microbleed = patch["has_microbleed"]
+        is_augmented = patch["is_augmented"]
         
         with np.load(patch_path) as patch_data:
-            volume = patch_data.get("volume")
-            mask = patch_data.get("mask")
-            voxel_weights = patch_data.get("voxel_weights")
+            patch_dict = {key: patch_data[key] for key in patch_data.files}
 
-        return volume, mask, voxel_weights, has_microbleed, is_augmented
+        patch_dict["has_microbleed"] = has_microbleed
+        patch_dict["is_augmented"] = is_augmented
+
+        return patch_dict
 
     def __getitem__(self, idx: int):
         raise NotImplementedError("Subclasses must implement the __getitem__ method.")
@@ -37,7 +38,12 @@ class BasePatchDataset(Dataset):
 
 class SegmentationPatchDataset(BasePatchDataset):
     def __getitem__(self, idx: int):
-        x, y, weights, _, is_augmented = self.load_patch(idx)
+        patch = self.load_patch(idx)
+
+        x = patch["volume"]
+        y = patch["mask"]
+        weights = patch["voxel_weights"]
+        is_augmented = patch["is_augmented"]
 
         if self.perform_augmentation and is_augmented:
             x, y, weights = augment(x, y, weights)

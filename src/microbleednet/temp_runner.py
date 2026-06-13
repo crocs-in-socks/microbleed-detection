@@ -7,14 +7,32 @@ from scipy.ndimage import gaussian_filter
 from sklearn.model_selection import train_test_split
 
 from microbleednet.core import utils
-from microbleednet.core.common import preprocess
+from microbleednet.core.engines import processor
 from microbleednet.core.engines.trainers import Trainer
 from microbleednet.core.common.tasks import SegmentationTask, SegmentationClassificationTask
 from microbleednet.core.common.models import CandidateDetector, CandidateDiscriminatorTeacher
 from microbleednet.core.dataloading.samplers import EqualBatchSampler
 from microbleednet.core.dataloading.datasets import SegmentationPatchDataset, SegmentationClassificationPatchDataset
 
+from microbleednet.core.transforms.patch import get_target_centered_patches
+
 def main():
+    inputs = [
+        Path("/home/gouri/workspace/ephemeral/samples/preprocessed/volumes/volume_0.nii.gz"),
+    ]
+    labels = [
+        Path("/home/gouri/workspace/ephemeral/samples/preprocessed/masks/mask_0.nii.gz"),
+    ]
+
+    volume = utils.load_volume(inputs[0])
+    volume = utils.nifti_to_numpy(volume)
+    mask = utils.load_volume(labels[0])
+    mask = utils.nifti_to_numpy(mask)
+
+    get_target_centered_patches(volume, mask, 24)
+
+
+def main_old():
     inputs = [
         Path("/home/gouri/workspace/ephemeral/samples/preprocessed/volumes/volume_0.nii.gz"),
         Path("/home/gouri/workspace/ephemeral/samples/preprocessed/volumes/volume_1.nii.gz")
@@ -158,8 +176,6 @@ def get_patches(subjects, patch_directory, patch_size, augmentation_factor):
         mask = utils.nifti_to_numpy(mask)
         mask_patches = utils.get_nonoverlapping_patches(mask, patch_size)
 
-        volume_has_microbleed = np.sum(mask) > 0
-
         voxel_weights = gaussian_filter(mask, 1.2) * 10
         voxel_weights_patches = utils.get_nonoverlapping_patches(voxel_weights, patch_size)
 
@@ -208,7 +224,7 @@ def temp_preprocess():
         volume = utils.load_volume(input_volume_path)
         mask = utils.load_volume(label_mask_path)
 
-        output_volume, output_mask, bounding_box = preprocess.run(volume, mask, True, True, True, True, True)
+        output_volume, output_mask, bounding_box = processor.run(volume, mask, True, True, True, True, True)
 
         output_volume = utils.numpy_to_nifti(output_volume, volume)
         output_volume_path = Path(f"/home/gouri/workspace/ephemeral/samples/preprocessed/volumes/volume_{idx}.nii.gz")

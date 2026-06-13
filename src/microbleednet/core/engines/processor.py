@@ -1,4 +1,6 @@
+from pathlib import Path
 from typing import Optional
+from typing import Callable
 
 import numpy as np
 import nibabel as nib
@@ -7,7 +9,7 @@ from microbleednet.core import utils
 from microbleednet.core import transforms
 
 
-def run(
+def preprocess(
     volume: nib.Nifti1Image,
     mask: Optional[nib.Nifti1Image],
     reorient_to_std: bool,
@@ -53,3 +55,33 @@ def run(
 
     return volume, mask, bounding_box
 
+def patchify(
+    volume: np.ndarray,
+    mask: np.ndarray,
+    patcher: Callable,
+    patch_size: int,
+    patch_dir: Path,
+    volume_identifier: str,
+    augmentation_factor: int,
+):
+    patch_dir.mkdir(parents=True, exist_ok=True)
+    patches = patcher(volume, mask, patch_size)
+
+    patch_metadata = []
+
+    for idx, patch_data in enumerate(patches):
+        patch_path = patch_dir / f"patch_{volume_identifier}_{idx:06d}.npz"
+        np.savez_compressed(patch_path, **patch_data)
+
+        has_microbleed = np.sum(patch_data['mask']) > 0
+
+        patch_metadata.extend(
+            {
+                "patch_path": str(patch_path.resolve()),
+                "has_microbleed": has_microbleed,
+                "is_augmented": version != 0
+            }
+            for version in range(augmentation_factor)
+        )
+
+    return patch_metadata

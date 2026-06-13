@@ -6,6 +6,8 @@ import nibabel as nib
 from pathlib import Path
 import SimpleITK as sitk
 
+from scipy.ndimage import gaussian_filter
+
 from .. import utils
 
 
@@ -114,6 +116,9 @@ def bias_field_correct(volume: nib.Nifti1Image) -> nib.Nifti1Image:
     corrected_nifti = utils.numpy_to_nifti(corrected_data, volume)
 
     return corrected_nifti
+
+def calculate_voxel_weights(volume: np.ndarray) -> np.ndarray:
+    return gaussian_filter(volume, 1.2) * 10
 
 def _fsl_process(
     volume: nib.Nifti1Image,

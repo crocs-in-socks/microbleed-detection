@@ -6,8 +6,8 @@ class EqualBatchSampler(Sampler):
     def __init__(self, patches: list, batch_size: int):
         self.batch_size = batch_size
 
-        self.pos_indices = [i for i, patch in enumerate(patches) if patch.get("has_microbleed")]
-        self.neg_indices = [i for i, patch in enumerate(patches) if not patch.get("has_microbleed")]
+        self.pos_indices = [i for i, patch in enumerate(patches) if patch["has_microbleed"]]
+        self.neg_indices = [i for i, patch in enumerate(patches) if not patch["has_microbleed"]]
 
         self.n_pos = self.batch_size // 2
         self.n_neg = self.batch_size // 2
