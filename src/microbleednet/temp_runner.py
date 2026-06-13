@@ -9,7 +9,7 @@ from sklearn.model_selection import train_test_split
 from microbleednet.core import utils
 from microbleednet.core.common import preprocess
 from microbleednet.core.engines.trainers import Trainer
-from microbleednet.core.engines.tasks import SegmentationTask, SegmentationClassificationTask
+from microbleednet.core.common.tasks import SegmentationTask, SegmentationClassificationTask
 from microbleednet.core.common.models import CandidateDetector, CandidateDiscriminatorTeacher
 from microbleednet.core.dataloading.samplers import EqualBatchSampler
 from microbleednet.core.dataloading.datasets import SegmentationPatchDataset, SegmentationClassificationPatchDataset

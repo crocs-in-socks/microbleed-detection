@@ -11,6 +11,7 @@ class BaseTask:
     def validation_step(self, batch):
         raise NotImplementedError("Subclasses must implement the validation_step method.")
 
+
 class SegmentationTask(BaseTask):
     def __init__(self):
         self.criterion = losses.DetectorLoss()
@@ -23,8 +24,8 @@ class SegmentationTask(BaseTask):
         x_frst = frst.apply(x)
         x = torch.cat((x, x_frst), dim=1) # Shape: (Batch, 2, H, W, D)
 
-        predictions = model(x)
-        loss = self.criterion(predictions, y, weights)
+        logits = model(x)
+        loss = self.criterion(logits, y, weights)
 
         return loss
 
@@ -45,10 +46,36 @@ class SegmentationClassificationTask(BaseTask):
         volume_frst = frst.apply(volume)
         volume = torch.cat((volume, volume_frst), dim=1) # Shape: (Batch, 2, H, W, D)
 
-        segmentation_predictions, classification_predictions = model(volume)
-        loss = self.criterion(classification_predictions, label, segmentation_predictions, mask, weights)
+        segmentation_logits, classification_logits = model(volume)
+        loss = self.criterion(classification_logits, label, segmentation_logits, mask, weights)
 
         return loss
 
     def validation_step(self, model, device, batch):
         return self.training_step(model, device, batch)
+
+class KnowledgeDistillationClassificationTask(BaseTask):
+    def __init__(self, teacher_model):
+        self.teacher_model = teacher_model
+        self.criterion = losses.DiscriminatorStudentLoss()
+
+        self.teacher_model.eval()
+    
+    def training_step(self, student_model, device, batch):
+        x = batch.get("x").to(device, dtype=torch.float)
+        y = batch.get("y").to(device, dtype=torch.float)
+
+        x_frst = frst.apply(x)
+        x = torch.cat((x, x_frst), dim=1)
+
+        with torch.no_grad():
+            _, teacher_logits = self.teacher_model(x)
+        
+        student_logits = student_model(x)
+
+        loss = self.criterion(teacher_logits, student_logits, y)
+
+        return loss
+
+    def validation_step(self, student_model, device, batch):
+        return self.training_step(student_model, device, batch)

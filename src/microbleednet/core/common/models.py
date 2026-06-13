@@ -3,6 +3,14 @@ import torch.nn as nn
 
 from . import layers
 
+def weight_init(model):
+    """Applies truncated normal initialization."""
+    if isinstance(model, (nn.Conv3d, nn.Linear)):
+        # PyTorch has a built-in truncated normal initializer
+        nn.init.trunc_normal_(model.weight, std=0.05)
+        if model.bias is not None:
+            nn.init.constant_(model.bias, 0.1)
+
 
 class CandidateDetector(nn.Module):
     def __init__(self, in_channels: int, n_classes: int, initial_channels: int):
@@ -17,6 +25,8 @@ class CandidateDetector(nn.Module):
 
         self.feature_extractor = FeatureExtractor(in_channels, level_channels)
         self.segmentor = Segmentor(level_channels, n_classes)
+
+        self.apply(weight_init)
 
     def forward(self, x):
         features = self.feature_extractor(x)
@@ -45,12 +55,42 @@ class CandidateDiscriminatorTeacher(nn.Module):
         self.segmentor = Segmentor(level_channels, n_classes)
         self.classifier = Classifier(level_channels[3], n_classes, dropout_rate)
 
+        self.apply(weight_init)
+
     def forward(self, x):
         features = self.feature_extractor(x)
         segmentation_logits = self.segmentor(features)
         classification_logits = self.classifier(features)
         return segmentation_logits, classification_logits
-    
+
+class CandidateDiscriminatorStudent(nn.Module):
+    def __init__(
+        self,
+        in_channels: int,
+        n_classes: int,
+        initial_channels: int,
+        dropout_rate: float,
+    ):
+        super().__init__()
+
+        level_channels = [
+            3,
+            initial_channels,
+            initial_channels * 2,
+            initial_channels * 4,
+        ]
+
+        self.feature_extractor = FeatureExtractor(in_channels, level_channels)
+        self.classifier = Classifier(level_channels[3], n_classes, dropout_rate)
+
+        self.apply(weight_init)
+
+    def forward(self, x):
+        features = self.feature_extractor(x)
+        logits = self.classifier(features)
+        return logits
+
+
 
 class FeatureExtractor(nn.Module):
     def __init__(self, in_channels: int, level_channels: list[int]):

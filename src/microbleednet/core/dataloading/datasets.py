@@ -59,9 +59,9 @@ class SegmentationClassificationPatchDataset(BasePatchDataset):
         if self.perform_augmentation and is_augmented:
             volume, mask, weights = augment(volume, mask, weights)
 
-        volume = np.expand_dims(volume, axis=0)
-        mask_one_hot = np.stack((1 - mask, mask), axis=0)
-        weights = np.expand_dims(weights, axis=0)
+        volume = np.expand_dims(volume, axis=0) # Shape: (1, H, W, D)
+        mask_one_hot = np.stack((1 - mask, mask), axis=0) # Shape: (2, H, W, D)
+        weights = np.expand_dims(weights, axis=0) # Shape: (1, H, W, D)
 
         label_one_hot = np.array([1 - int(label), int(label)])
 
@@ -70,4 +70,19 @@ class SegmentationClassificationPatchDataset(BasePatchDataset):
             "mask": torch.from_numpy(mask_one_hot).float(),
             "weights": torch.from_numpy(weights).float(),
             "label": torch.from_numpy(label_one_hot).float()
+        }
+
+class ClassificationPatchDataset(BasePatchDataset):
+    def __getitem__(self, idx):
+        x, _, _, y, is_augmented = self.load_patch(idx)
+
+        if self.perform_augmentation and is_augmented:
+            x = augment(x)
+
+        x = np.expand_dims(x, axis=0) # Shape: (1, H, W, D)
+        y_one_hot = np.array([1 - int(y), int(y)]) 
+
+        return {
+            "x": torch.from_numpy(x).float(),
+            "y": torch.from_numpy(y_one_hot).float()
         }
