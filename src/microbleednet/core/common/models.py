@@ -119,9 +119,9 @@ class Segmentor(nn.Module):
         self.out_conv = layers.OutConv(level_channels[1], n_classes)
 
     def forward(self, features):
-        x1 = features.get("x1")
-        x2 = features.get("x2")
-        x3 = features.get("x3")
+        x1 = features["x1"]
+        x2 = features["x2"]
+        x3 = features["x3"]
 
         x = self.up_2(x3, x2)
         x = self.up_1(x, x1)
@@ -147,7 +147,7 @@ class Classifier(nn.Module):
         self.fc_3 = nn.Linear(linear_nodes[2], linear_nodes[3])
 
     def forward(self, features):
-        x3 = features.get("x3")
+        x3 = features["x3"]
         x = self.in_conv(x3)
         x = self.down_1(x)
         x = self.down_2(x)
