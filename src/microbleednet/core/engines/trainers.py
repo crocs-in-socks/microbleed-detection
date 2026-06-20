@@ -8,6 +8,7 @@ from torch.amp import GradScaler
 from torch.utils.data import DataLoader
 from torch.nn.utils import clip_grad_norm_
 
+from .. import constants
 from microbleednet.core import utils
 from microbleednet.core.common.tasks import BaseTask
 from microbleednet.core.engines.evaluators import Evaluator
@@ -22,7 +23,7 @@ class Trainer:
         scheduler_parameters: dict,
         task: BaseTask,
         checkpoint_dir: Path,
-        compile_model: bool = True
+        compile_model: bool = constants.engines.trainers.default.compile_model
     ):
         self.model = model
         self.device = device
@@ -37,7 +38,7 @@ class Trainer:
         else:
             self.model = model
 
-        self.clip_norm = optimizer_parameters.pop("clip_norm", 1.0)
+        self.clip_norm = optimizer_parameters.pop("clip_norm", constants.engines.trainers.default.clip_norm)
         self.optimizer = optim.Adam(self.model.parameters(), **optimizer_parameters)
         self.scheduler = optim.lr_scheduler.MultiStepLR(self.optimizer, **scheduler_parameters)
 
@@ -49,7 +50,14 @@ class Trainer:
 
         self.evaluator = Evaluator(self.model, self.device, self.task)
 
-    def fit(self, train_loader: DataLoader, val_loader: DataLoader, n_epochs: int, checkpoint_path: Path = None, weights_only: bool = False):
+    def fit(
+        self,
+        train_loader: DataLoader,
+        val_loader: DataLoader,
+        n_epochs: int,
+        checkpoint_path: Path = constants.engines.trainers.default.checkpoint_path,
+        weights_only: bool = constants.engines.trainers.default.weights_only
+    ):
         start_epoch = 0
         if checkpoint_path:
             start_epoch = self.load_checkpoint(checkpoint_path, weights_only)

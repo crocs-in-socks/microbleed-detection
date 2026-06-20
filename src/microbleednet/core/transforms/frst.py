@@ -2,16 +2,16 @@ import math
 import torch
 import torchvision.transforms.functional as F
 
-from .constants import TransformConstants
+from .. import constants
 
 
 def apply(
     volumes: torch.Tensor, 
-    radii: list = TransformConstants.FRST_RADII, 
-    alpha: float = TransformConstants.FRST_ALPHA, 
-    factor_std: float = TransformConstants.FRST_FACTOR_STD, 
-    bright: bool = TransformConstants.FRST_BRIGHT, 
-    dark: bool = TransformConstants.FRST_DARK
+    radii: list = constants.transforms.frst.radii, 
+    alpha: float = constants.transforms.frst.alpha, 
+    factor_std: float = constants.transforms.frst.factor_std, 
+    bright: bool = constants.transforms.frst.bright, 
+    dark: bool = constants.transforms.frst.dark
 ) -> torch.Tensor:
     """
     Batched 3D FRST on GPU.
