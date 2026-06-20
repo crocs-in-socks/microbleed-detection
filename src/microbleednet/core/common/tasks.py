@@ -57,7 +57,7 @@ class SegmentationClassificationTask(BaseTask):
 class KnowledgeDistillationClassificationTask(BaseTask):
     def __init__(self, teacher_model):
         self.teacher_model = teacher_model
-        self.criterion = losses.DiscriminatorStudentLoss(alpha=0.4, beta=0.6, temperature=4)
+        self.criterion = losses.DiscriminatorStudentLoss()
 
         self.teacher_model = torch.compile(self.teacher_model)
 

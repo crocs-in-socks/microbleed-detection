@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from .. import constants
+
 
 class SingleConv(nn.Module):
     """
@@ -9,7 +11,7 @@ class SingleConv(nn.Module):
     """
 
     def __init__(
-        self, in_channels: int, out_channels: int, kernel_size: int, padding: int = 1
+        self, in_channels: int, out_channels: int, kernel_size: int, padding: int = constants.common.layers.single_conv.default.padding
     ):
         super().__init__()
         self.layer = nn.Sequential(

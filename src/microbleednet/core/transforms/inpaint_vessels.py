@@ -12,10 +12,8 @@ from skimage.feature import structure_tensor_eigenvalues
 from joblib import delayed
 from joblib import Parallel
 
-from pathlib import Path
-
-from .constants import TransformConstants
-from microbleednet.core import utils
+from .. import constants
+from .. import utils
 
 def apply(volume: np.ndarray) -> np.ndarray:
     """
@@ -23,9 +21,6 @@ def apply(volume: np.ndarray) -> np.ndarray:
     """
     vessel_mask = get_volume_vessel_mask(volume)
     vessel_mask = binary_dilation(vessel_mask, iterations=1)
-
-    # temp = utils.numpy_to_nifti(vessel_mask, utils.numpy_to_nifti(volume))
-    # utils.save_volume(temp, Path("/home/gouri/workspace/ephemeral/vessel_mask.nii.gz"))
 
     inpainted_volume = inpaint_with_neighborhood_mean(volume, vessel_mask)
 
@@ -59,10 +54,10 @@ def get_slice_vessel_mask(slice: np.ndarray) -> None:
 
     frangi_slice = frangi(
         slice,
-        sigmas=TransformConstants.FRANGI_FILTER_SIGMAS,
-        alpha=TransformConstants.FRANGI_FILTER_ALPHA,
-        beta=TransformConstants.FRANGI_FILTER_BETA,
-        black_ridges=TransformConstants.FRANGI_FILTER_BLACK_RIDGES,
+        sigmas=constants.transforms.frangi.sigmas,
+        alpha=constants.transforms.frangi.alpha,
+        beta=constants.transforms.frangi.beta,
+        black_ridges=constants.transforms.frangi.black_ridges,
     )
     frangi_slice = frangi_slice * brain_mask
 
@@ -74,8 +69,8 @@ def get_slice_vessel_mask(slice: np.ndarray) -> None:
 
     slice_features = np.stack([frangi_slice.ravel(), linearity.ravel()], axis=1)
     clusterer = KMeans(
-        n_clusters=TransformConstants.VESSEL_INPAINTING_CLUSTERER_N_CLUSTERS,
-        random_state=TransformConstants.VESSEL_INPAINTING_CLUSTERER_RANDOM_STATE,
+        n_clusters=constants.transforms.vessel_inpainting.clusterer_n_clusters,
+        random_state=constants.transforms.vessel_inpainting.clusterer_random_state,
     ).fit(slice_features)
     clusters = clusterer.labels_
 
@@ -90,8 +85,8 @@ def get_slice_vessel_mask(slice: np.ndarray) -> None:
         prop.label
         for prop in vessel_mask_props
         if not (
-            prop.eccentricity < TransformConstants.VESSEL_INPAINTING_MINIMUM_VESSEL_ECCENTRICITY
-            and prop.solidity > TransformConstants.VESSEL_INPAINTING_MAXIMUM_VESSEL_SOLIDITY
+            prop.eccentricity < constants.transforms.vessel_inpainting.minimum_vessel_eccentricity
+            and prop.solidity > constants.transforms.vessel_inpainting.maximum_vessel_solidity
         )
     ]
     

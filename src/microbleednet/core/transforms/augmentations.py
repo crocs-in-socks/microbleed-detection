@@ -3,7 +3,7 @@ import numpy as np
 from skimage.util import random_noise
 from scipy.ndimage import gaussian_filter
 
-from .constants import TransformConstants
+from .. import constants
 
 
 def translate_array(array, offsetx: int, offsety: int):
@@ -30,8 +30,8 @@ def translate(*volumes, **kwargs):
     Applied to ALL provided volumes equally.
     (kwargs swallows 'intensity_indices' passed by the main loop)
     """
-    offsetx = random.randint(*TransformConstants.AUGMENTATION_TRANSLATION_OFFSET_RANGE)
-    offsety = random.randint(*TransformConstants.AUGMENTATION_TRANSLATION_OFFSET_RANGE)
+    offsetx = random.randint(*constants.transforms.augmentation.translation_offset_range)
+    offsety = random.randint(*constants.transforms.augmentation.translation_offset_range)
 
     translated_volumes = tuple(translate_array(vol, offsetx, offsety) for vol in volumes)
     
@@ -42,7 +42,7 @@ def add_noise(*volumes, intensity_indices=(0,)):
     Random noise injection: Distribution - Gaussian, mu = 0, sigma^2 = [0.01, 0.04]
     Applied ONLY to the volumes specified by intensity_indices.
     """
-    variance = random.uniform(*TransformConstants.AUGMENTATION_NOISE_VARIANCE_RANGE)
+    variance = random.uniform(*constants.transforms.augmentation.noise_variance_range)
     
     result = list(volumes)
     
@@ -56,7 +56,7 @@ def blur(*volumes, intensity_indices=(0,)):
     Gaussian filtering: sigma = [0.1, 0.2] voxels
     Applied ONLY to the volumes specified by intensity_indices.
     """
-    sigma = random.uniform(*TransformConstants.AUGMENTATION_BLUR_SIGMA_RANGE)
+    sigma = random.uniform(*constants.transforms.augmentation.blur_sigma_range)
     
     result = list(volumes)
     

@@ -1,11 +1,11 @@
-import torch
-
 import torch.nn as nn
 import torch.nn.functional as F
 
+from .. import constants
+
 
 class DiceLoss(nn.Module):
-    def __init__(self, smooth: float = 1.0):
+    def __init__(self, smooth: float = constants.common.losses.dice.default.smooth):
         super().__init__()
         self.smooth = smooth
 
@@ -37,7 +37,7 @@ class DetectorLoss(nn.Module):
     """
     dice loss + weighted voxel-wise cross entropy loss
     """
-    def __init__(self, dice_smooth=1.0):
+    def __init__(self, dice_smooth=constants.common.losses.dice.default.smooth):
         super().__init__()
         self.dice_loss = DiceLoss(smooth=dice_smooth)
         self.cross_entropy_loss = nn.CrossEntropyLoss(reduction="none") # no reduction so that we can apply weights
@@ -60,7 +60,7 @@ class DiscriminatorTeacherLoss(nn.Module):
     """
     dice loss + weighted voxel-wise cross entropy loss + binary cross entropy
     """
-    def __init__(self, dice_smooth=1.0):
+    def __init__(self, dice_smooth=constants.common.losses.dice.default.smooth):
         super().__init__()
         self.segmentation_loss = DetectorLoss(dice_smooth)
         self.classification_loss = nn.BCEWithLogitsLoss()
@@ -75,7 +75,12 @@ class DiscriminatorStudentLoss(nn.Module):
     """
     weight_alpha * cross entropy loss + weight_beta * knowledge distillation loss
     """
-    def __init__(self, alpha: float, beta: float, temperature: float):
+    def __init__(
+        self,
+        alpha: float = constants.common.losses.discriminator.student.default.alpha,
+        beta: float = constants.common.losses.discriminator.student.default.beta,
+        temperature: float = constants.common.losses.discriminator.student.default.temperature
+    ):
         super().__init__()
         self.alpha = alpha
         self.beta = beta

@@ -33,6 +33,6 @@ class Evaluator:
 
                 running_loss += loss.item()
         
-        average_loss = running_loss  /len(dataloader)
+        average_loss = running_loss / len(dataloader)
         
         return average_loss

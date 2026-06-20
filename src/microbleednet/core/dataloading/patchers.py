@@ -2,6 +2,8 @@ from pathlib import Path
 
 import numpy as np
 
+from .. import constants
+
 from microbleednet.core.transforms import basic
 from microbleednet.core.transforms import patch
 
@@ -46,7 +48,7 @@ def materialize_patches(
     patches: list,
     patch_dir: Path,
     volume_identifier: str,
-    augmentation_factor: int = 1,
+    augmentation_factor: int = constants.dataloading.patchers.default.augmentation_factor,
 ):
     patch_dir.mkdir(parents=True, exist_ok=True)
 
