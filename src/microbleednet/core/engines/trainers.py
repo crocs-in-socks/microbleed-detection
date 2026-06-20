@@ -8,6 +8,7 @@ from torch.amp import GradScaler
 from torch.utils.data import DataLoader
 from torch.nn.utils import clip_grad_norm_
 
+from microbleednet.core import utils
 from microbleednet.core.common.tasks import BaseTask
 from microbleednet.core.engines.evaluators import Evaluator
 
@@ -20,16 +21,23 @@ class Trainer:
         optimizer_parameters: dict,
         scheduler_parameters: dict,
         task: BaseTask,
-        checkpoint_dir: Path
+        checkpoint_dir: Path,
+        compile_model: bool = True
     ):
         self.model = model
         self.device = device
         self.task = task
         
         self.checkpoint_dir = checkpoint_dir
+        self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
+
+        if compile_model and hasattr(torch, "compile"):
+            print("Compiling model for faster training...")
+            self.model = torch.compile(model)
+        else:
+            self.model = model
 
         self.clip_norm = optimizer_parameters.pop("clip_norm", 1.0)
-
         self.optimizer = optim.Adam(self.model.parameters(), **optimizer_parameters)
         self.scheduler = optim.lr_scheduler.MultiStepLR(self.optimizer, **scheduler_parameters)
 
@@ -45,6 +53,8 @@ class Trainer:
         start_epoch = 0
         if checkpoint_path:
             start_epoch = self.load_checkpoint(checkpoint_path, weights_only)
+
+        self.model = self.model.to(self.device)
 
         for epoch in range(start_epoch, n_epochs):
             train_loss = self.train_epoch(train_loader)
@@ -82,9 +92,14 @@ class Trainer:
         return average_loss
 
     def save_checkpoint(self, epoch: int, is_best: bool) -> None:
+        if hasattr(self.model, "_orig_mod"):
+            model_state = self.model._orig_mod.state_dict()
+        else:
+            model_state = self.model.state_dict()
+
         state = {
             "epoch": epoch,
-            "model_state_dict": self.model.state_dict(),
+            "model_state_dict": model_state,
             "optimizer_state_dict": self.optimizer.state_dict(),
             "scheduler_state_dict": self.scheduler.state_dict(),
             "scaler_state_dict": self.scaler.state_dict(),
@@ -98,33 +113,24 @@ class Trainer:
             best_path = self.checkpoint_dir / "best_model.pth"
             torch.save(self.model.state_dict(), best_path)
 
-    def load_checkpoint(self, checkpoint_path: Path, weights_only: bool):
-        if not checkpoint_path.is_file():
-            print(f"No checkpoint found at {checkpoint_path.resolve()}. Starting training from scratch.")
-            return 0
+    def load_checkpoint(self, checkpoint_path: Path, weights_only: bool) -> int:
 
-        print(f"Loading checkpoint from: {checkpoint_path.resolve()}.")
-        checkpoint = torch.load(checkpoint_path, map_location=self.device)
+        checkpoint = utils.load_model_weights(self.model, self.device, checkpoint_path)
+
+        if checkpoint is None:
+            print("Starting training from scratch.")
+            return 0
 
         if weights_only:
-            # If the file is a full state dict, extract just the model weights.
-            # If it's already just raw weights, use it directly.
-            state_dict = checkpoint.get("model_state_dict", checkpoint)
-            missing, unexpected = self.model.load_state_dict(state_dict, strict=False)
             print("Loaded model weights only. Starting from epoch 0.")
-
-            if missing or unexpected:
-                print(f"Note: Some keys did not match perfectly.")
-
             return 0
 
-        self.model.load_state_dict(checkpoint["model_state_dict"])
         self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         self.scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
         self.scaler.load_state_dict(checkpoint["scaler_state_dict"])
         self.best_val_loss = checkpoint["best_val_loss"]
         
-        start_epoch = checkpoint["epoch"] + 1 
+        start_epoch = checkpoint.get("epoch", -1) + 1
         print(f"Successfully restored full state. Resuming from epoch {start_epoch}.")
         
         return start_epoch

@@ -2,6 +2,7 @@ from pathlib import Path
 
 import torch
 import numpy as np
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from scipy.ndimage import gaussian_filter
 from sklearn.model_selection import train_test_split
@@ -9,30 +10,120 @@ from sklearn.model_selection import train_test_split
 from microbleednet.core import utils
 from microbleednet.core.engines import processor
 from microbleednet.core.engines.trainers import Trainer
-from microbleednet.core.common.tasks import SegmentationTask, SegmentationClassificationTask
-from microbleednet.core.common.models import CandidateDetector, CandidateDiscriminatorTeacher
+from microbleednet.core.common.tasks import SegmentationTask, SegmentationClassificationTask, KnowledgeDistillationClassificationTask
+from microbleednet.core.common.models import CandidateDetector, CandidateDiscriminatorTeacher, CandidateDiscriminatorStudent
+from microbleednet.core.dataloading import patchers
 from microbleednet.core.dataloading.samplers import EqualBatchSampler
-from microbleednet.core.dataloading.datasets import SegmentationPatchDataset, SegmentationClassificationPatchDataset
+from microbleednet.core.dataloading.datasets import SegmentationPatchDataset, SegmentationClassificationPatchDataset, ClassificationPatchDataset
 
-from microbleednet.core.transforms.patch import get_target_centered_patches
 
 def main():
     inputs = [
+        Path("/home/gouri/workspace/ephemeral/samples/preprocessed/volumes/volume_1.nii.gz"),
         Path("/home/gouri/workspace/ephemeral/samples/preprocessed/volumes/volume_0.nii.gz"),
     ]
     labels = [
+        Path("/home/gouri/workspace/ephemeral/samples/preprocessed/masks/mask_1.nii.gz"),
         Path("/home/gouri/workspace/ephemeral/samples/preprocessed/masks/mask_0.nii.gz"),
     ]
 
-    volume = utils.load_volume(inputs[0])
-    volume = utils.nifti_to_numpy(volume)
-    mask = utils.load_volume(labels[0])
-    mask = utils.nifti_to_numpy(mask)
+    subjects = list(zip(inputs, labels))
 
-    get_target_centered_patches(volume, mask, 24)
+    # constants
+    device = torch.device("cuda")
+    pin_memory = True
+    train_proportion = 0.8
+    random_state = 42
+    num_workers = 4
+    batch_size = 64
+    patch_size = 24
+    augmentation_factor = 5
+    optimizer_parameters = {
+        "lr": 1e-3,
+        "eps": 1e-4,
+    }
+    scheduler_parameters = {
+        "milestones": [2, 4, 6],
+        "gamma": 0.1,
+    }
+    detector_threshold = 0
+    detector_checkpoint_path = Path("/home/gouri/workspace/ephemeral/samples/checkpoints/detector/best_model.pth")
+    discriminator_teacher_checkpoint_path = Path("/home/gouri/workspace/ephemeral/samples/checkpoints/discriminator_teacher/best_model.pth")
+    checkpoint_dir = Path("/home/gouri/workspace/ephemeral/samples/checkpoints/discriminator_student")
+    train_patch_path = Path("/home/gouri/workspace/ephemeral/samples/patches/train")
+    test_patch_path = Path("/home/gouri/workspace/ephemeral/samples/patches/test")
+
+    train_subjects, test_subjects = train_test_split(subjects, train_size=train_proportion, random_state=random_state)
+
+    detector_model = CandidateDetector(2, 2, 64).to(device)
+    utils.load_model_weights(detector_model, device, detector_checkpoint_path)
+
+    train_patches = []
+    for idx, subject in enumerate(train_subjects):
+        volume_path, mask_path = subject
+
+        volume = utils.nifti_to_numpy(utils.load_volume(volume_path))
+        mask = utils.nifti_to_numpy(utils.load_volume(mask_path))
+
+        detector_logits = processor.infer(detector_model, device, volume)
+        detector_output = F.softmax(detector_logits, dim=1)
+        detector_output = detector_output.cpu().numpy()[0, 1]
+        detector_output = (detector_output > detector_threshold).astype(int)
+
+        subject_patches = patchers.target_centered_patcher(volume, mask, detector_output, patch_size)
+        subject_patches = patchers.materialize_patches(subject_patches, train_patch_path, str(idx), augmentation_factor)
+        train_patches.extend(subject_patches)
+
+    test_patches = []
+    for idx, subject in enumerate(test_subjects):
+        volume_path, mask_path = subject
+
+        volume = utils.nifti_to_numpy(utils.load_volume(volume_path))
+        mask = utils.nifti_to_numpy(utils.load_volume(mask_path))
+
+        detector_logits = processor.infer(detector_model, device, volume)
+        detector_output = F.softmax(detector_logits, dim=1)
+        detector_output = detector_output.cpu().numpy()[0, 1]
+        detector_output = (detector_output > detector_threshold).astype(int)
+
+        subject_patches = patchers.target_centered_patcher(volume, mask, detector_output, patch_size)
+        subject_patches = patchers.materialize_patches(subject_patches, test_patch_path, str(idx), augmentation_factor)
+        test_patches.extend(subject_patches)
+
+    # Free detector model - no longer needed
+    del detector_model
+    torch.cuda.empty_cache()
+
+    train_set = ClassificationPatchDataset(train_patches, perform_augmentation=True)
+    train_sampler = EqualBatchSampler(train_patches, batch_size=batch_size)
+    train_loader = DataLoader(
+        dataset=train_set,
+        # batch_sampler=train_sampler,
+        num_workers=num_workers,
+        pin_memory=pin_memory
+    )
+
+    test_set = ClassificationPatchDataset(test_patches)
+    test_loader = DataLoader(
+        dataset=test_set,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=pin_memory
+    )
+    
+    teacher_model = CandidateDiscriminatorTeacher(2, 2, 64, 0.2).to(device)
+    utils.load_model_weights(teacher_model, device, discriminator_teacher_checkpoint_path)
+
+    student_model = CandidateDiscriminatorStudent(2, 2, 64, 0.2).to(device)
+    
+    task = KnowledgeDistillationClassificationTask(teacher_model)
+    trainer = Trainer(student_model, device, optimizer_parameters, scheduler_parameters, task, checkpoint_dir)
+
+    trainer.fit(train_loader, test_loader, n_epochs=10)
 
 
-def main_old():
+def temp_train_discriminator_teacher():
     inputs = [
         Path("/home/gouri/workspace/ephemeral/samples/preprocessed/volumes/volume_0.nii.gz"),
         Path("/home/gouri/workspace/ephemeral/samples/preprocessed/volumes/volume_1.nii.gz")
@@ -50,7 +141,7 @@ def main_old():
     train_proportion = 0.8
     random_state = 42
     num_workers = 4
-    batch_size = 2
+    batch_size = 32
     patch_size = 24
     augmentation_factor = 10
     optimizer_parameters = {
@@ -61,12 +152,35 @@ def main_old():
         "milestones": [2, 4, 6],
         "gamma": 0.1,
     }
-    checkpoint_dir = Path("/home/gouri/workspace/ephemeral/samples/checkpoints")
+    detector_checkpoint_path = Path("/home/gouri/workspace/ephemeral/samples/checkpoints/detector/best_model.pth")
+    checkpoint_dir = Path("/home/gouri/workspace/ephemeral/samples/checkpoints/discriminator_teacher")
+    train_patch_path = Path("/home/gouri/workspace/ephemeral/samples/patches/train")
+    test_patch_path = Path("/home/gouri/workspace/ephemeral/samples/patches/test")
 
     train_subjects, test_subjects = train_test_split(subjects, train_size=train_proportion, random_state=random_state)
 
-    train_patch_path = Path("/home/gouri/workspace/ephemeral/samples/patches/train")
-    train_patches = get_patches(train_subjects, train_patch_path, patch_size, augmentation_factor)
+    train_patches = []
+    for idx, subject in enumerate(train_subjects):
+        volume_path, mask_path = subject
+
+        volume = utils.nifti_to_numpy(utils.load_volume(volume_path))
+        mask = utils.nifti_to_numpy(utils.load_volume(mask_path))
+
+        subject_patches = patchers.nonoverlapping_patcher(volume, mask, patch_size)
+        subject_patches = patchers.materialize_patches(subject_patches, train_patch_path, str(idx), augmentation_factor)
+        train_patches.extend(subject_patches)
+
+    test_patches = []
+    for idx, subject in enumerate(test_subjects):
+        volume_path, mask_path = subject
+
+        volume = utils.nifti_to_numpy(utils.load_volume(volume_path))
+        mask = utils.nifti_to_numpy(utils.load_volume(mask_path))
+
+        subject_patches = patchers.nonoverlapping_patcher(volume, mask, patch_size)
+        subject_patches = patchers.materialize_patches(subject_patches, test_patch_path, str(idx), 1)
+        test_patches.extend(subject_patches)
+
     train_set = SegmentationClassificationPatchDataset(train_patches, perform_augmentation=True)
     train_sampler = EqualBatchSampler(train_patches, batch_size=batch_size)
     train_loader = DataLoader(
@@ -76,8 +190,6 @@ def main_old():
         pin_memory=pin_memory,
     )
 
-    test_patch_path = Path("/home/gouri/workspace/ephemeral/samples/patches/test")
-    test_patches = get_patches(test_subjects, test_patch_path, patch_size, augmentation_factor)
     test_set = SegmentationClassificationPatchDataset(test_patches)
     test_loader = DataLoader(
         dataset=test_set,
@@ -87,17 +199,13 @@ def main_old():
         pin_memory=pin_memory,
     )
     
-    # model = CandidateDetector(2, 2, 64).to(device)
-    # task = SegmentationTask()
-    # trainer = Trainer(model, device, optimizer_parameters, scheduler_parameters, task)
-
-    # trainer.fit(train_loader, test_loader, num_epochs=10)
-
     model = CandidateDiscriminatorTeacher(2, 2, 64, 0.2).to(device)
+    utils.load_model_weights(model, device, detector_checkpoint_path)
+    
     task = SegmentationClassificationTask()
     trainer = Trainer(model, device, optimizer_parameters, scheduler_parameters, task, checkpoint_dir)
 
-    trainer.fit(train_loader, test_loader, 10)
+    trainer.fit(train_loader, test_loader, n_epochs=10)
 
 
 def temp_train_detector():
@@ -118,7 +226,7 @@ def temp_train_detector():
     train_proportion = 0.8
     random_state = 42
     num_workers = 4
-    batch_size = 2
+    batch_size = 16
     patch_size = 48
     augmentation_factor = 10
     optimizer_parameters = {
@@ -129,11 +237,34 @@ def temp_train_detector():
         "milestones": [2, 4, 6],
         "gamma": 0.1,
     }
+    checkpoint_dir = Path("/home/gouri/workspace/ephemeral/samples/checkpoints/detector")
+    train_patch_path = Path("/home/gouri/workspace/ephemeral/samples/patches/train")
+    test_patch_path = Path("/home/gouri/workspace/ephemeral/samples/patches/test")
 
     train_subjects, test_subjects = train_test_split(subjects, train_size=train_proportion, random_state=random_state)
 
-    train_patch_path = Path("/home/gouri/workspace/ephemeral/samples/patches/train")
-    train_patches = get_patches(train_subjects, train_patch_path, patch_size, augmentation_factor)
+    train_patches = []
+    for idx, subject in enumerate(train_subjects):
+        volume_path, mask_path = subject
+
+        volume = utils.nifti_to_numpy(utils.load_volume(volume_path))
+        mask = utils.nifti_to_numpy(utils.load_volume(mask_path))
+
+        subject_patches = patchers.nonoverlapping_patcher(volume, mask, patch_size)
+        subject_patches = patchers.materialize_patches(subject_patches, train_patch_path, str(idx), augmentation_factor)
+        train_patches.extend(subject_patches)
+
+    test_patches = []
+    for idx, subject in enumerate(test_subjects):
+        volume_path, mask_path = subject
+
+        volume = utils.nifti_to_numpy(utils.load_volume(volume_path))
+        mask = utils.nifti_to_numpy(utils.load_volume(mask_path))
+
+        subject_patches = patchers.nonoverlapping_patcher(volume, mask, patch_size)
+        subject_patches = patchers.materialize_patches(subject_patches, train_patch_path, str(idx), 1)
+        test_patches.extend(subject_patches)
+
     train_set = SegmentationPatchDataset(train_patches, perform_augmentation=True)
     train_sampler = EqualBatchSampler(train_patches, batch_size=batch_size)
     train_loader = DataLoader(
@@ -143,8 +274,6 @@ def temp_train_detector():
         pin_memory=pin_memory,
     )
 
-    test_patch_path = Path("/home/gouri/workspace/ephemeral/samples/patches/test")
-    test_patches = get_patches(test_subjects, test_patch_path, patch_size, augmentation_factor)
     test_set = SegmentationPatchDataset(test_patches)
     test_loader = DataLoader(
         dataset=test_set,
@@ -153,59 +282,12 @@ def temp_train_detector():
         num_workers=num_workers,
         pin_memory=pin_memory,
     )
-
+    
     model = CandidateDetector(2, 2, 64).to(device)
     task = SegmentationTask()
-    trainer = Trainer(model, device, optimizer_parameters, scheduler_parameters, task)
+    trainer = Trainer(model, device, optimizer_parameters, scheduler_parameters, task, checkpoint_dir)
 
-    trainer.fit(train_loader, test_loader, num_epochs=10)
-
-
-def get_patches(subjects, patch_directory, patch_size, augmentation_factor):
-    patch_directory.mkdir(parents=True, exist_ok=True)
-    patches = []
-    global_patch_idx = 0
-    for subject in subjects:
-        volume_path, mask_path = subject
-
-        volume = utils.load_volume(volume_path)
-        volume = utils.nifti_to_numpy(volume)
-        volume_patches = utils.get_nonoverlapping_patches(volume, patch_size)
-
-        mask = utils.load_volume(mask_path)
-        mask = utils.nifti_to_numpy(mask)
-        mask_patches = utils.get_nonoverlapping_patches(mask, patch_size)
-
-        voxel_weights = gaussian_filter(mask, 1.2) * 10
-        voxel_weights_patches = utils.get_nonoverlapping_patches(voxel_weights, patch_size)
-
-        subject_patches = zip(volume_patches, mask_patches, voxel_weights_patches)
-
-        for idx, (input_patch, label_patch, voxel_weights_patch) in enumerate(subject_patches):
-            patch_path = patch_directory / f"patch_{global_patch_idx:06d}.npz"  # Use global index
-            global_patch_idx += 1
-            np.savez_compressed(
-                patch_path,
-                volume=input_patch,
-                mask=label_patch,
-                voxel_weights=voxel_weights_patch,
-            )
-
-            has_microbleed = np.sum(label_patch) > 0
-
-            patches.extend(
-                [
-                    {
-                        "patch_path": str(patch_path.resolve()),
-                        "has_microbleed": bool(has_microbleed),
-                        "is_augmented": version != 0,
-                    }
-                    for version in range(augmentation_factor)
-                ]
-            )
-
-    return patches
-
+    trainer.fit(train_loader, test_loader, n_epochs=10)
 
 
 def temp_preprocess():

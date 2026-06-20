@@ -35,6 +35,11 @@ def get_nonoverlapping_patches(volume: np.ndarray, patch_size: int) -> list:
 
 
 def get_target_centered_patches(volume: np.ndarray, target: np.ndarray, patch_size: int) -> list:
+    padding = [(patch_size // 2, patch_size // 2) for s in volume.shape]
+
+    volume = np.pad(volume, padding, mode='constant', constant_values=0)
+    target = np.pad(target, padding, mode='constant', constant_values=0)
+
     target = label(target)
     dist_props = regionprops(target)
     n_patches = len(dist_props)
