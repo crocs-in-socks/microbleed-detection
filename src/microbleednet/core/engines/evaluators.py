@@ -21,6 +21,7 @@ class Evaluator:
         self.amp_dtype = torch.float16 if use_amp else torch.bfloat16
 
     def evaluate(self, dataloader: DataLoader) -> float:
+        self.model = self.model.to(self.device)
         self.model.eval()
         running_loss = 0.0
 

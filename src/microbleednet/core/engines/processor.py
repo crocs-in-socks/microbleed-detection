@@ -1,12 +1,14 @@
-from pathlib import Path
 from typing import Optional
-from typing import Callable
 
+import torch
 import numpy as np
+import torch.nn as nn
 import nibabel as nib
+from torch.amp import autocast
 
 from microbleednet.core import utils
 from microbleednet.core import transforms
+from microbleednet.core.transforms import frst
 
 
 def preprocess(
@@ -55,33 +57,25 @@ def preprocess(
 
     return volume, mask, bounding_box
 
-def patchify(
-    volume: np.ndarray,
-    mask: np.ndarray,
-    patcher: Callable,
-    patch_size: int,
-    patch_dir: Path,
-    volume_identifier: str,
-    augmentation_factor: int,
+def infer(
+    model: nn.Module,
+    device: torch.device,
+    volume: np.ndarray
 ):
-    patch_dir.mkdir(parents=True, exist_ok=True)
-    patches = patcher(volume, mask, patch_size)
+    volume = np.expand_dims(volume, axis=(0, 1)) # Shape: (1, 1, H, W, D)
+    volume = torch.from_numpy(volume).float().to(device)
 
-    patch_metadata = []
+    volume_frst = frst.apply(volume)
+    volume = torch.cat((volume, volume_frst), dim=1)
 
-    for idx, patch_data in enumerate(patches):
-        patch_path = patch_dir / f"patch_{volume_identifier}_{idx:06d}.npz"
-        np.savez_compressed(patch_path, **patch_data)
+    model = model.to(device)
+    model.eval()
 
-        has_microbleed = np.sum(patch_data['mask']) > 0
+    use_amp = (device.type == "cuda")
+    amp_dtype = torch.float16 if use_amp else torch.bfloat16
 
-        patch_metadata.extend(
-            {
-                "patch_path": str(patch_path.resolve()),
-                "has_microbleed": has_microbleed,
-                "is_augmented": version != 0
-            }
-            for version in range(augmentation_factor)
-        )
-
-    return patch_metadata
+    with torch.no_grad():
+        with autocast(device_type=device.type, dtype=amp_dtype):
+            logits = model(volume)
+    
+    return logits

@@ -1,3 +1,5 @@
+import torch
+
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -25,7 +27,7 @@ class KnowledgeDistillationLoss(nn.Module):
         self.temperature = temperature
     
     def forward(self, teacher_logits, student_logits):
-        teacher_predictions = F.log_softmax(teacher_logits / self.temperature, dim=1)
+        teacher_predictions = F.softmax(teacher_logits / self.temperature, dim=1)
         student_predictions = F.log_softmax(student_logits / self.temperature, dim=1)
 
         return F.kl_div(student_predictions, teacher_predictions, reduction="batchmean") # batchmean is for standard KL divergence

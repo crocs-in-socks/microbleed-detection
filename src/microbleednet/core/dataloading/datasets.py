@@ -60,7 +60,13 @@ class SegmentationPatchDataset(BasePatchDataset):
 
 class SegmentationClassificationPatchDataset(BasePatchDataset):
     def __getitem__(self, idx: int):
-        volume, mask, weights, label, is_augmented = self.load_patch(idx)
+        patch = self.load_patch(idx)
+
+        volume = patch["volume"]
+        mask = patch["mask"]
+        weights = patch["voxel_weights"]
+        label = patch["has_microbleed"]
+        is_augmented = patch["is_augmented"]
 
         if self.perform_augmentation and is_augmented:
             volume, mask, weights = augment(volume, mask, weights)
@@ -80,10 +86,14 @@ class SegmentationClassificationPatchDataset(BasePatchDataset):
 
 class ClassificationPatchDataset(BasePatchDataset):
     def __getitem__(self, idx):
-        x, _, _, y, is_augmented = self.load_patch(idx)
+        patch = self.load_patch(idx)
+
+        x = patch["volume"]
+        y = patch["has_microbleed"]
+        is_augmented = patch["is_augmented"]
 
         if self.perform_augmentation and is_augmented:
-            x = augment(x)
+            (x,) = augment(x)  # Unpack the tuple returned by augment
 
         x = np.expand_dims(x, axis=0) # Shape: (1, H, W, D)
         y_one_hot = np.array([1 - int(y), int(y)]) 
