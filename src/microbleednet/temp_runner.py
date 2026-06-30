@@ -16,8 +16,11 @@ from microbleednet.core.dataloading import patchers
 from microbleednet.core.dataloading.samplers import EqualBatchSampler
 from microbleednet.core.dataloading.datasets import SegmentationPatchDataset, SegmentationClassificationPatchDataset, ClassificationPatchDataset
 
-
 def main():
+    pass
+
+
+def temp_train_discriminator_student():
     inputs = [
         Path("/home/gouri/workspace/ephemeral/samples/preprocessed/volumes/volume_1.nii.gz"),
         Path("/home/gouri/workspace/ephemeral/samples/preprocessed/volumes/volume_0.nii.gz"),

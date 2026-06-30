@@ -18,10 +18,10 @@ class Trainer:
     def __init__(
         self,
         model: nn.Module,
+        task: BaseTask,
         device: torch.device,
         optimizer_parameters: dict,
         scheduler_parameters: dict,
-        task: BaseTask,
         checkpoint_dir: Path,
         compile_model: bool = constants.engines.trainers.default.compile_model
     ):
