@@ -63,7 +63,7 @@ def execute(
         "subjects": subjects
     }
 
-    with open(raw_manifest_path, mode="w") as raw_manifest_file:
+    with open(raw_manifest_path, mode="a") as raw_manifest_file:
         json.dump(raw_manifest_data, raw_manifest_file)
 
 
