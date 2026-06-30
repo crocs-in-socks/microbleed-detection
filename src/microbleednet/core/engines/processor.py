@@ -19,7 +19,7 @@ def preprocess(
     bias_field_correct: bool,
     invert_volume: bool,
     inpaint_vessels: bool
-) -> tuple[np.ndarray, Optional[np.ndarray], np.ndarray]:
+) -> dict[np.ndarray, Optional[np.ndarray], np.ndarray]:
 
     if reorient_to_std:
         volume = transforms.basic.reorient_to_std(volume)
@@ -55,7 +55,11 @@ def preprocess(
         volume = transforms.inpaint_vessels.apply(volume)
         print("inpainted vessels")
 
-    return volume, mask, bounding_box
+    return {
+        "volume": volume,
+        "mask": mask,
+        "bounding_box": bounding_box
+    }
 
 def infer(
     model: nn.Module,

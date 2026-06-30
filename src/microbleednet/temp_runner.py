@@ -262,7 +262,7 @@ def temp_train_detector():
         mask = utils.nifti_to_numpy(utils.load_volume(mask_path))
 
         subject_patches = patchers.nonoverlapping_patcher(volume, mask, patch_size)
-        subject_patches = patchers.materialize_patches(subject_patches, train_patch_path, str(idx), 1)
+        subject_patches = patchers.materialize_patches(subject_patches, test_patch_path, str(idx), 1)
         test_patches.extend(subject_patches)
 
     train_set = SegmentationPatchDataset(train_patches, perform_augmentation=True)
