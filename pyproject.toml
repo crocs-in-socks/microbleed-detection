@@ -19,7 +19,7 @@ dependencies = [
 ]
 
 [project.scripts]
-microbleednet = "microbleednet.cli:main"
+microbleednet = "microbleednet.cli.entrypoint:main"
 test = "microbleednet.temp_runner:main"
 
 [build-system]
