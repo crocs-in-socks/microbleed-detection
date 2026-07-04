@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import gc
 import torch
 import torch.nn.functional as F
 
@@ -7,6 +8,13 @@ from ..core import utils as core_utils
 from ..core.common.models import CandidateDetector 
 from ..core.engines import processor as core_processor
 from ..core.dataloading import patchers as core_patchers
+
+def delete_model(model):
+    del model
+    gc.collect()
+
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
 
 
 def collect_patches(subjects: list, subject_patcher: function, patcher_parameters: dict):

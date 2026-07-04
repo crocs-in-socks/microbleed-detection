@@ -1,3 +1,5 @@
+from pathlib import Path
+
 class transforms:
     class frangi:
         sigmas = (0.5, 1.2, 0.2)
@@ -26,6 +28,9 @@ class transforms:
 
 class engines:
     class trainers:
+        best_checkpoint_path = Path("best_model.pth")
+        latest_checkpoint_path = Path("latest_model.pth")
+
         class default:
             compile_model = True
             clip_norm = 1.0
