@@ -23,7 +23,7 @@ def execute(
         mask_pattern = None
 
     volume_paths = compute_paths(input_dir, volume_pattern)
-    mask_paths = compute_paths(label_dir, mask_pattern) if mask_pattern is None else list()
+    mask_paths = compute_paths(label_dir, mask_pattern) if mask_pattern is not None else list()
 
     if input_dir == label_dir:
         volume_paths, mask_paths = remove_overlap(volume_paths, mask_paths)
@@ -40,30 +40,36 @@ def execute(
             for path in mask_paths
         }
 
-    subjects = []
+    raw_manifest_path = dataset_dir / constants.manifests.raw
+    raw_manifest_data = {"stage": "raw", "sources": [], "subjects": {}}
+    if raw_manifest_path.exists():
+        with open(raw_manifest_path, mode="r") as f:
+            existing_data = json.load(f)
+            raw_manifest_data["stage"] = existing_data.get("stage", "raw")
+            raw_manifest_data["sources"] = existing_data.get("sources", [])
+            # Map existing subjects by ID for deduplication
+            raw_manifest_data["subjects"] = {s["subject_id"]: s for s in existing_data.get("subjects", [])}
+
+    raw_manifest_data["sources"].append({
+        "input_dir": str(input_dir.resolve()),
+        "label_dir": str(label_dir.resolve()) if label_dir else None,
+        "volume_pattern": volume_pattern,
+        "mask_pattern": mask_pattern,
+        "added_on": datetime.now().isoformat(),
+    })
 
     for subject_id, volume_path in volume_subject_map.items():
         mask_path = mask_subject_map.get(subject_id)
-        subject = {
+        raw_manifest_data["subjects"][subject_id] = {
             "subject_id": subject_id,
             "volume_path": str(volume_path.resolve()),
             "mask_path": str(mask_path.resolve()) if mask_path else None
         }
 
-        subjects.append(subject)
+    # Convert subjects back to a list
+    raw_manifest_data["subjects"] = list(raw_manifest_data["subjects"].values())
 
-    raw_manifest_path = dataset_dir / constants.manifests.raw
-    raw_manifest_data = {
-        "stage": "raw",
-        "input_dir": str(input_dir.resolve()),
-        "label_dir": str(label_dir.resolve()) if label_dir else None,
-        "volume_pattern": volume_pattern,
-        "mask_pattern": mask_pattern if mask_pattern else None,
-        "created_on": datetime.now().isoformat(),
-        "subjects": subjects
-    }
-
-    with open(raw_manifest_path, mode="a") as raw_manifest_file:
+    with open(raw_manifest_path, mode="w") as raw_manifest_file:
         json.dump(raw_manifest_data, raw_manifest_file)
 
 

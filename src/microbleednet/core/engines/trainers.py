@@ -114,11 +114,11 @@ class Trainer:
             "best_val_loss": self.best_val_loss
         }
 
-        latest_path = self.checkpoint_dir / "latest_model.pth"
+        latest_path = self.checkpoint_dir / constants.engines.trainers.default.latest_checkpoint_path
         torch.save(state, latest_path)
 
         if is_best:
-            best_path = self.checkpoint_dir / "best_model.pth"
+            best_path = self.checkpoint_dir / constants.engines.trainers.default.best_checkpoint_path
             torch.save(self.model.state_dict(), best_path)
 
     def load_checkpoint(self, checkpoint_path: Path, weights_only: bool) -> int:
