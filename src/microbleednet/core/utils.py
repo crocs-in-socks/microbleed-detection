@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import tempfile
 from pathlib import Path
@@ -9,6 +10,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+
+logger = logging.getLogger(__name__)
 
 CHECKPOINT_FORMAT_VERSION = 1
 
@@ -51,7 +54,7 @@ def load_model_weights(model: nn.Module, device: torch.device, checkpoint_path: 
     if not checkpoint_path.is_file():
         raise FileNotFoundError(f"checkpoint not found: {checkpoint_path.resolve()}")
 
-    print(f"Loading weights from: {checkpoint_path.resolve()}.")
+    logger.info("Loading weights from: %s.", checkpoint_path.resolve())
 
     checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=True)
     state_dict = checkpoint.get("model_state_dict", checkpoint)

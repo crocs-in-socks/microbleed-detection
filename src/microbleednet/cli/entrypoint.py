@@ -1,8 +1,10 @@
+import logging
 from pathlib import Path
 from typing_extensions import Annotated
 
 import torch
 import typer
+from rich.logging import RichHandler
 
 from . import index_data
 from .config import load_config, path_value, require_keys
@@ -15,6 +17,24 @@ app = typer.Typer(
 )
 
 app.add_typer(index_data.app)
+
+
+@app.callback()
+def _configure_logging(
+    verbose: Annotated[bool, typer.Option(help="Emit debug-level logs.")] = False,
+    quiet: Annotated[bool, typer.Option(help="Only emit warnings and errors.")] = False,
+) -> None:
+    """Configure Rich logging once for the whole CLI."""
+    if verbose and quiet:
+        raise typer.BadParameter("--verbose and --quiet are mutually exclusive")
+    level = logging.DEBUG if verbose else logging.WARNING if quiet else logging.INFO
+    logging.basicConfig(
+        level=level,
+        format="%(message)s",
+        datefmt="[%X]",
+        handlers=[RichHandler(rich_tracebacks=True, show_path=False)],
+        force=True,
+    )
 
 
 def _config(path: Path, required: tuple[str, ...]) -> dict:

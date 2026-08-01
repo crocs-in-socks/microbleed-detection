@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 import torch
@@ -12,6 +13,9 @@ from .. import constants
 from microbleednet.core import utils
 from microbleednet.core.common.tasks import BaseTask
 from microbleednet.core.engines.evaluators import Evaluator
+
+
+logger = logging.getLogger(__name__)
 
 
 class Trainer:
@@ -47,7 +51,7 @@ class Trainer:
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
         if compile_model and hasattr(torch, "compile"):
-            print("Compiling model for faster training...")
+            logger.info("Compiling model for faster training...")
             self.model = torch.compile(model)
         else:
             self.model = model
@@ -165,7 +169,7 @@ class Trainer:
         checkpoint = utils.load_model_weights(self.model, self.device, checkpoint_path)
 
         if weights_only:
-            print("Loaded model weights only. Starting from epoch 0.")
+            logger.info("Loaded model weights only. Starting from epoch 0.")
             return 0
 
         self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
@@ -176,6 +180,8 @@ class Trainer:
         self.epoch_records = checkpoint.get("epoch_records", [])
         
         start_epoch = checkpoint.get("epoch", -1) + 1
-        print(f"Successfully restored full state. Resuming from epoch {start_epoch}.")
+        logger.info(
+            "Successfully restored full state. Resuming from epoch %s.", start_epoch
+        )
         
         return start_epoch
