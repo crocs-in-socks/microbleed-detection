@@ -19,6 +19,11 @@ dependencies = [
     "typer>=0.24.1",
 ]
 
+[project.optional-dependencies]
+plots = [
+    "matplotlib>=3.9.0",
+]
+
 [dependency-groups]
 dev = [
     "pyright>=1.1.390",
