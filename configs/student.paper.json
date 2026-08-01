@@ -1,0 +1,79 @@
+{
+    "data": {
+        "modality": "T2*-GRE",
+        "require_masks": true
+    },
+    "preprocessing": {
+        "canonical_orientation": true,
+        "extract_brain": true,
+        "bias_field_correction": true,
+        "invert_volume": true,
+        "inpaint_vessels": true
+    },
+    "augmentation": {
+        "translation_offset_range": [
+            -15,
+            15
+        ],
+        "noise_variance_range": [
+            0.01,
+            0.04
+        ],
+        "blur_sigma_range": [
+            0.1,
+            0.2
+        ]
+    },
+    "detector": {
+        "initial_channels": 64,
+        "input_channels": 2,
+        "output_classes": 2,
+        "dropout_rate": 0.5,
+        "patch_size": 48,
+        "augmentation_factor": 10,
+        "probability_threshold": 0.0
+    },
+    "teacher": {
+        "initial_channels": 64,
+        "input_channels": 2,
+        "output_classes": 2,
+        "dropout_rate": 0.5,
+        "patch_size": 24,
+        "augmentation_factor": 5
+    },
+    "student": {
+        "initial_channels": 64,
+        "input_channels": 2,
+        "output_classes": 2,
+        "dropout_rate": 0.5,
+        "patch_size": 24,
+        "augmentation_factor": 5,
+        "probability_threshold": 0.0,
+        "temperature": 4.0,
+        "alpha": 0.4,
+        "beta": 0.6
+    },
+    "trainer": {
+        "learning_rate": 0.001,
+        "adam_epsilon": 0.0001,
+        "batch_size": 8,
+        "max_epochs": 100,
+        "patience": 20,
+        "learning_rate_factor": 0.1,
+        "learning_rate_period": 2,
+        "minimum_learning_rate": 0.000001
+    },
+    "postprocessing": {
+        "minimum_volume_mm3": 2.5,
+        "maximum_eccentricity": 0.2,
+        "minimum_boundary_distance_voxels": 0.0
+    },
+    "evaluation": {
+        "detector_thresholds": [
+            0.0
+        ],
+        "discriminator_thresholds": [
+            0.0
+        ]
+    }
+}

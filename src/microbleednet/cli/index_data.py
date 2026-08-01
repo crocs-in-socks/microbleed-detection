@@ -16,7 +16,6 @@ def validate_pattern(value: str) -> str:
         raise typer.BadParameter("The input must contain the '{subject_id}' placeholder.")
     return value
 
-# TODO: improve the help message
 @app.command(
     name="index-data",
     help="""
@@ -44,6 +43,9 @@ def validate_parameters(
         help="Naming pattern of masks in the label directory. Must contain '{subject_id}'",
         callback=validate_pattern
     )] = None,
+    require_masks: Annotated[bool, typer.Option(
+        help="Require every volume to have a matching mask.",
+    )] = True,
 ) -> None:
     if label_dir is not None and mask_pattern is None:
         raise typer.BadParameter("If you provider --label-dir, you MUST also provide --mask-pattern")
@@ -55,5 +57,6 @@ def validate_parameters(
         input_dir=input_dir,
         volume_pattern=volume_pattern,
         label_dir=label_dir,
-        mask_pattern=mask_pattern
+        mask_pattern=mask_pattern,
+        require_masks=require_masks,
     )
