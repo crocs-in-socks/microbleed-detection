@@ -1,10 +1,13 @@
 import csv
+import logging
 from pathlib import Path
 from typing import Any, Iterable
 
 from ..core import utils
 from ..core.evaluation.matching import match_components
 from ..core.evaluation.metrics import aggregate_metrics
+
+logger = logging.getLogger(__name__)
 
 
 def evaluate_subjects(
@@ -40,6 +43,10 @@ def evaluate_subjects(
         import matplotlib.pyplot as plt
     except ImportError:
         plt = None
+        logger.info(
+            "matplotlib not installed; skipping the counts plot. "
+            "Install the 'plots' extra to enable it."
+        )
     if plt is not None:
         figure, axis = plt.subplots()
         axis.bar(["TP", "FN", "FP"], [aggregate["true_positives"], aggregate["false_negatives"], aggregate["false_positives"]])
