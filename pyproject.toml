@@ -1,9 +1,9 @@
 [project]
 name = "microbleednet"
 version = "2.0.0"
-description = "Add your description here"
+description = "Research implementation of MicrobleedNet for cerebral microbleed detection"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.13,<3.14"
 dependencies = [
     "natsort>=8.4.0",
     "nibabel>=5.4.2",
@@ -18,9 +18,25 @@ dependencies = [
     "typer>=0.24.1",
 ]
 
+[dependency-groups]
+dev = [
+    "pyright>=1.1.390",
+    "pytest>=8.3.0",
+    "ruff>=0.9.0",
+]
+
 [project.scripts]
 microbleednet = "microbleednet.cli.entrypoint:main"
-test = "microbleednet.temp_runner:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
 
 [build-system]
 requires = ["uv_build>=0.11.6,<0.12.0"]
