@@ -10,7 +10,7 @@ from rich.logging import RichHandler
 
 from . import index_data
 from .config import load_config, path_value, require_keys
-from ..config import PreprocessCommandConfig
+from ..config import EvaluateCommandConfig, PreprocessCommandConfig
 from ..pipelines import evaluate, infer, preprocess, train
 
 _ConfigModel = TypeVar("_ConfigModel", bound=BaseModel)
@@ -149,19 +149,16 @@ def evaluate_command(
     config: Annotated[Path, typer.Option(..., exists=True, dir_okay=False)],
     dry_run: Annotated[bool, typer.Option(help="Validate configuration without writing outputs.")] = False,
 ) -> None:
-    values = _config(config, ("subjects", "output_dir"))
-    if not isinstance(values["subjects"], list) or not values["subjects"]:
-        raise typer.BadParameter("configuration key 'subjects' must be a non-empty list")
-    for subject in values["subjects"]:
-        for key in ("prediction_path", "reference_path"):
-            path = Path(subject.get(key, ""))
+    settings = _parse_config(config, EvaluateCommandConfig)
+    for subject in settings.subjects:
+        for path in (subject.prediction_path, subject.reference_path):
             if not path.is_file():
                 raise typer.BadParameter(f"configured path does not exist: {path}")
     if dry_run:
-        _finish(f"Evaluation configuration valid for {len(values['subjects'])} subjects (dry run)")
+        _finish(f"Evaluation configuration valid for {len(settings.subjects)} subjects (dry run)")
         return
-    result = evaluate.execute(values["subjects"], Path(values["output_dir"]), values.get("metadata"))
-    _finish(f"Evaluated {len(result['subjects'])} subjects; report written under {values['output_dir']}")
+    result = evaluate.execute(settings.subjects, settings.output_dir, settings.metadata)
+    _finish(f"Evaluated {len(result['subjects'])} subjects; report written under {settings.output_dir}")
 
 
 def main() -> None:
