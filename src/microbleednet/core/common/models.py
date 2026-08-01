@@ -28,7 +28,7 @@ class CandidateDetector(nn.Module):
 
         self.apply(weight_init)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         features = self.feature_extractor(x)
         logits = self.segmentor(features)
         return logits
@@ -57,7 +57,7 @@ class CandidateDiscriminatorTeacher(nn.Module):
 
         self.apply(weight_init)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         features = self.feature_extractor(x)
         segmentation_logits = self.segmentor(features)
         classification_logits = self.classifier(features)
@@ -85,7 +85,7 @@ class CandidateDiscriminatorStudent(nn.Module):
 
         self.apply(weight_init)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         features = self.feature_extractor(x)
         logits = self.classifier(features)
         return logits
@@ -101,7 +101,7 @@ class FeatureExtractor(nn.Module):
         self.down_1 = layers.DownConv(level_channels[1], level_channels[2], 3, 1)
         self.down_2 = layers.DownConv(level_channels[2], level_channels[3], 3, 1)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> dict[str, torch.Tensor]:
         x0 = self.in_conv(x)
         x1 = self.conv_1(x0)
         x2 = self.down_1(x1)
@@ -118,7 +118,7 @@ class Segmentor(nn.Module):
         self.up_1 = layers.UpConv(level_channels[2], level_channels[1], 3)
         self.out_conv = layers.OutConv(level_channels[1], n_classes)
 
-    def forward(self, features):
+    def forward(self, features: dict[str, torch.Tensor]) -> torch.Tensor:
         x1 = features["x1"]
         x2 = features["x2"]
         x3 = features["x3"]
@@ -136,22 +136,28 @@ class Classifier(nn.Module):
 
         level_channels = [in_channels, in_channels // 2]
 
-        linear_nodes = [1024, 128, 32, n_classes]
+        linear_nodes = [level_channels[1], 128, 32, n_classes]
 
-        self.in_conv = layers.SingleConv(level_channels[0], level_channels[1], 1)
+        self.in_conv = layers.SingleConv(level_channels[0], level_channels[1], 1, padding=0)
         self.down_1 = layers.DownConv(level_channels[1], level_channels[1], 3, 3)
         self.down_2 = layers.DownConv(level_channels[1], level_channels[1], 3, 3)
         self.fc_1 = nn.Linear(linear_nodes[0], linear_nodes[1])
         self.dropout = nn.Dropout(p=dropout_rate)
         self.fc_2 = nn.Linear(linear_nodes[1], linear_nodes[2])
         self.fc_3 = nn.Linear(linear_nodes[2], linear_nodes[3])
+        self.expected_features = level_channels[1]
 
-    def forward(self, features):
+    def forward(self, features: dict[str, torch.Tensor]) -> torch.Tensor:
         x3 = features["x3"]
         x = self.in_conv(x3)
         x = self.down_1(x)
         x = self.down_2(x)
         x = torch.flatten(x, 1)
+        if x.shape[1] != self.expected_features:
+            raise ValueError(
+                f"classifier expects 24^3 input geometry with {self.expected_features} "
+                f"features, got {x.shape[1]}"
+            )
         x = self.fc_1(x)
         x = self.dropout(x)
         x = self.fc_2(x)

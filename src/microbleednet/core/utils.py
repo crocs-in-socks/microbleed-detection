@@ -10,6 +10,13 @@ import torch
 import torch.nn as nn
 
 
+CHECKPOINT_FORMAT_VERSION = 1
+
+
+def unwrap_model(model: nn.Module) -> nn.Module:
+    return model._orig_mod if hasattr(model, "_orig_mod") else model
+
+
 def load_volume(path: Path) -> nib.Nifti1Image:
     return nib.load(path)
 
@@ -42,16 +49,34 @@ def numpy_to_nifti(array: np.ndarray, reference: nib.Nifti1Image | None = None) 
 
 def load_model_weights(model: nn.Module, device: torch.device, checkpoint_path: Path):
     if not checkpoint_path.is_file():
-        print(f"No checkpoint found at {checkpoint_path.resolve()}.")
-        return None
+        raise FileNotFoundError(f"checkpoint not found: {checkpoint_path.resolve()}")
 
     print(f"Loading weights from: {checkpoint_path.resolve()}.")
 
-    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
+    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=True)
     state_dict = checkpoint.get("model_state_dict", checkpoint)
-    missing, unexpected = model.load_state_dict(state_dict, strict=False)
+    missing, unexpected = unwrap_model(model).load_state_dict(state_dict, strict=False)
 
     if missing or unexpected:
-        print("Note: Some keys did not match perfectly.")
+        raise RuntimeError(f"checkpoint keys do not match; missing={missing}, unexpected={unexpected}")
 
     return checkpoint
+
+
+def initialize_teacher_from_detector(detector: nn.Module, teacher: nn.Module) -> None:
+    detector_state = unwrap_model(detector).state_dict()
+    teacher_state = unwrap_model(teacher).state_dict()
+    transferable = {
+        key: value
+        for key, value in detector_state.items()
+        if key.startswith(("feature_extractor.", "segmentor."))
+    }
+    missing = [key for key in transferable if key not in teacher_state]
+    if missing:
+        raise RuntimeError(f"detector-to-teacher keys missing in teacher: {missing}")
+    teacher_state.update(transferable)
+    unwrap_model(teacher).load_state_dict(teacher_state, strict=True)
+
+
+def load_teacher_for_student(teacher: nn.Module, checkpoint_path: Path, device: torch.device):
+    return load_model_weights(teacher, device, checkpoint_path)

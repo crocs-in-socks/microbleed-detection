@@ -23,11 +23,17 @@ class Trainer:
         optimizer_parameters: dict,
         scheduler_parameters: dict,
         checkpoint_dir: Path,
-        compile_model: bool = constants.engines.trainers.default.compile_model
+        compile_model: bool = constants.engines.trainers.default.compile_model,
+        stage: str = "training",
+        model_config: dict | None = None,
+        provenance: dict | None = None,
     ):
         self.model = model
         self.device = device
         self.task = task
+        self.stage = stage
+        self.model_config = model_config or {}
+        self.provenance = provenance or {}
         
         self.checkpoint_dir = checkpoint_dir
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
@@ -38,6 +44,7 @@ class Trainer:
         else:
             self.model = model
 
+        optimizer_parameters = dict(optimizer_parameters)
         self.clip_norm = optimizer_parameters.pop("clip_norm", constants.engines.trainers.default.clip_norm)
         self.optimizer = optim.Adam(self.model.parameters(), **optimizer_parameters)
         self.scheduler = optim.lr_scheduler.MultiStepLR(self.optimizer, **scheduler_parameters)
@@ -100,12 +107,13 @@ class Trainer:
         return average_loss
 
     def save_checkpoint(self, epoch: int, is_best: bool) -> None:
-        if hasattr(self.model, "_orig_mod"):
-            model_state = self.model._orig_mod.state_dict()
-        else:
-            model_state = self.model.state_dict()
+        model_state = utils.unwrap_model(self.model).state_dict()
 
         state = {
+            "format_version": utils.CHECKPOINT_FORMAT_VERSION,
+            "stage": self.stage,
+            "model_config": self.model_config,
+            "provenance": self.provenance,
             "epoch": epoch,
             "model_state_dict": model_state,
             "optimizer_state_dict": self.optimizer.state_dict(),
@@ -114,20 +122,16 @@ class Trainer:
             "best_val_loss": self.best_val_loss
         }
 
-        latest_path = self.checkpoint_dir / constants.engines.trainers.default.latest_checkpoint_path
+        latest_path = self.checkpoint_dir / constants.engines.trainers.latest_checkpoint_path
         torch.save(state, latest_path)
 
         if is_best:
-            best_path = self.checkpoint_dir / constants.engines.trainers.default.best_checkpoint_path
-            torch.save(self.model.state_dict(), best_path)
+            best_path = self.checkpoint_dir / constants.engines.trainers.best_checkpoint_path
+            torch.save(state, best_path)
 
     def load_checkpoint(self, checkpoint_path: Path, weights_only: bool) -> int:
 
         checkpoint = utils.load_model_weights(self.model, self.device, checkpoint_path)
-
-        if checkpoint is None:
-            print("Starting training from scratch.")
-            return 0
 
         if weights_only:
             print("Loaded model weights only. Starting from epoch 0.")

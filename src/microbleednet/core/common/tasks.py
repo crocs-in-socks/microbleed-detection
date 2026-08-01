@@ -18,14 +18,13 @@ class SegmentationTask(BaseTask):
 
     def training_step(self, model, device, batch):
         x = batch["x"].to(device, dtype=torch.float)
-        y = batch["y"].to(device, dtype=torch.float)
-        weights = batch["weights"].to(device, dtype=torch.float)
+        y = batch["y"].to(device, dtype=torch.long)
 
         x_frst = frst.apply(x)
         x = torch.cat((x, x_frst), dim=1) # Shape: (Batch, 2, H, W, D)
 
         logits = model(x)
-        loss = self.criterion(logits, y, weights)
+        loss = self.criterion(logits, y)
 
         return loss
 
@@ -39,15 +38,14 @@ class SegmentationClassificationTask(BaseTask):
     
     def training_step(self, model, device, batch):
         volume = batch["volume"].to(device, dtype=torch.float)
-        mask = batch["mask"].to(device, dtype=torch.float)
-        weights = batch["weights"].to(device, dtype=torch.float)
-        label = batch["label"].to(device, dtype=torch.float)
+        mask = batch["mask"].to(device, dtype=torch.long)
+        label = batch["label"].to(device, dtype=torch.long)
 
         volume_frst = frst.apply(volume)
         volume = torch.cat((volume, volume_frst), dim=1) # Shape: (Batch, 2, H, W, D)
 
         segmentation_logits, classification_logits = model(volume)
-        loss = self.criterion(classification_logits, label, segmentation_logits, mask, weights)
+        loss = self.criterion(classification_logits, label, segmentation_logits, mask)
 
         return loss
 
@@ -59,13 +57,11 @@ class KnowledgeDistillationClassificationTask(BaseTask):
         self.teacher_model = teacher_model
         self.criterion = losses.DiscriminatorStudentLoss()
 
-        self.teacher_model = torch.compile(self.teacher_model)
-
         self.teacher_model.eval()
     
     def training_step(self, student_model, device, batch):
         x = batch["x"].to(device, dtype=torch.float)
-        y = batch["y"].to(device, dtype=torch.float)
+        y = batch["y"].to(device, dtype=torch.long)
 
         x_frst = frst.apply(x)
         x = torch.cat((x, x_frst), dim=1)
