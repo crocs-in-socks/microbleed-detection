@@ -59,9 +59,9 @@ dataloader_parameters = {
 }
 
 model_parameters = {
-    # Required by CandidateDetector(in_channels, n_classes, initial_channels)
-    "in_channels": 1,
-    "n_classes": 2,
+    # Required by CandidateDetector(input_channels, output_classes, initial_channels)
+    "input_channels": 1,
+    "output_classes": 2,
     "initial_channels": 16
 }
 
@@ -168,7 +168,7 @@ def _run_stage(stage: str, train_subjects, validation_subjects, parameters, mode
 
 def train_detector(train_subjects, validation_subjects, parameters, experiment_dir: Path) -> Path:
     stage_parameters = _stage_parameters(parameters, experiment_dir, "detector")
-    stage_parameters["model_parameters"]["in_channels"] = 2
+    stage_parameters["model_parameters"]["input_channels"] = 2
     stage_parameters["model_parameters"].setdefault("initial_channels", 64)
     model = CandidateDetector(**stage_parameters["model_parameters"])
     task = SegmentationTask()
@@ -178,7 +178,7 @@ def train_detector(train_subjects, validation_subjects, parameters, experiment_d
 
 def train_teacher(train_subjects, validation_subjects, parameters, detector_checkpoint: Path, experiment_dir: Path) -> Path:
     stage_parameters = _stage_parameters(parameters, experiment_dir, "teacher")
-    stage_parameters["model_parameters"]["in_channels"] = 2
+    stage_parameters["model_parameters"]["input_channels"] = 2
     detector = CandidateDetector(**stage_parameters["model_parameters"])
     core_utils.load_model_weights(detector, stage_parameters["trainer_parameters"]["device"], detector_checkpoint)
     teacher = CandidateDiscriminatorTeacher(**stage_parameters["model_parameters"])
@@ -195,7 +195,7 @@ def train_teacher(train_subjects, validation_subjects, parameters, detector_chec
 
 def train_student(train_subjects, validation_subjects, parameters, detector_checkpoint: Path, teacher_checkpoint: Path, experiment_dir: Path) -> Path:
     stage_parameters = _stage_parameters(parameters, experiment_dir, "student")
-    stage_parameters["model_parameters"]["in_channels"] = 2
+    stage_parameters["model_parameters"]["input_channels"] = 2
     detector = CandidateDetector(**stage_parameters["model_parameters"])
     teacher = CandidateDiscriminatorTeacher(**stage_parameters["model_parameters"])
     device = stage_parameters["trainer_parameters"]["device"]
