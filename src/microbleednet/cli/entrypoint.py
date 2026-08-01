@@ -1,14 +1,19 @@
 import logging
 from pathlib import Path
+from typing import TypeVar
 from typing_extensions import Annotated
 
 import torch
 import typer
+from pydantic import BaseModel, ValidationError
 from rich.logging import RichHandler
 
 from . import index_data
 from .config import load_config, path_value, require_keys
+from ..config import PreprocessCommandConfig
 from ..pipelines import evaluate, infer, preprocess, train
+
+_ConfigModel = TypeVar("_ConfigModel", bound=BaseModel)
 
 app = typer.Typer(
     name="microbleednet",
@@ -43,6 +48,18 @@ def _config(path: Path, required: tuple[str, ...]) -> dict:
     return config
 
 
+def _parse_config(path: Path, model: type[_ConfigModel]) -> _ConfigModel:
+    """Load a config file and validate it into a typed model.
+
+    Pydantic validation errors are surfaced as clean CLI errors rather than
+    tracebacks.
+    """
+    try:
+        return model.model_validate(load_config(path))
+    except ValidationError as error:
+        raise typer.BadParameter(f"invalid configuration {path}:\n{error}") from error
+
+
 def _finish(message: str) -> None:
     typer.echo(message)
 
@@ -72,14 +89,14 @@ def preprocess_command(
     config: Annotated[Path, typer.Option(..., exists=True, dir_okay=False)],
     dry_run: Annotated[bool, typer.Option(help="Validate configuration without writing outputs.")] = False,
 ) -> None:
-    values = _config(config, ("dataset_dir", "preprocessor_parameters"))
-    dataset_dir = path_value(values, "dataset_dir")
+    settings = _parse_config(config, PreprocessCommandConfig)
+    dataset_dir = settings.dataset_dir
     if not (dataset_dir / "manifests" / "raw.json").is_file():
         raise typer.BadParameter("dataset_dir has no raw manifest")
     if dry_run:
         _finish(f"Preprocess configuration valid for {dataset_dir} (dry run)")
         return
-    preprocess.execute(dataset_dir, values["preprocessor_parameters"])
+    preprocess.execute(dataset_dir, settings.preprocessing)
     _finish(f"Preprocessed artifacts written under {dataset_dir}")
 
 

@@ -1,4 +1,5 @@
 import math
+from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -286,3 +287,19 @@ class InferenceConfig(FrozenConfig):
     student: StudentConfig
     postprocessing: PostprocessingConfig
     evaluation: EvaluationConfig
+
+
+class PreprocessCommandConfig(FrozenConfig):
+    dataset_dir: Path = Field(
+        description=(
+            "Indexed dataset directory containing manifests/raw.json; "
+            "preprocessed artifacts are written under it."
+        ),
+    )
+    preprocessing: PreprocessingConfig = Field(
+        default_factory=PreprocessingConfig,
+        description=(
+            "Preprocessing steps to apply. Defaults follow the paper "
+            "(all steps enabled)."
+        ),
+    )

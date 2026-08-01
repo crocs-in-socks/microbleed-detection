@@ -25,7 +25,7 @@ def test_preprocess_dry_run_writes_no_outputs(tmp_path: Path) -> None:
     manifest_dir.mkdir(parents=True)
     (manifest_dir / "raw.json").write_text(json.dumps({"subjects": []}), encoding="utf-8")
     config_path = tmp_path / "preprocess.json"
-    config_path.write_text(json.dumps({"dataset_dir": str(dataset_dir), "preprocessor_parameters": {}}), encoding="utf-8")
+    config_path.write_text(json.dumps({"dataset_dir": str(dataset_dir)}), encoding="utf-8")
 
     result = runner.invoke(app, ["preprocess", "--config", str(config_path), "--dry-run"])
     assert result.exit_code == 0, result.output
