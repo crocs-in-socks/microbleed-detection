@@ -63,6 +63,32 @@ def _parse_config(path: Path, model: type[_ConfigModel]) -> _ConfigModel:
         raise typer.BadParameter(f"invalid configuration {path}:\n{error}") from error
 
 
+def _config_help(model: type[BaseModel], prefix: str = "") -> list[str]:
+    """Render a model's fields (recursing into nested models) as help lines.
+
+    The command help is derived from the model so descriptions, defaults, and
+    required-ness never drift from the single source of truth in config.py.
+    """
+    lines: list[str] = []
+    for name, field in model.model_fields.items():
+        key = f"{prefix}{name}"
+        annotation = field.annotation
+        if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+            lines.extend(_config_help(annotation, prefix=f"{key}."))
+            continue
+        if field.is_required():
+            requirement = "required"
+        else:
+            requirement = f"default {field.default!r}"
+        description = field.description or ""
+        lines.append(f"  {key} ({requirement}): {description}".rstrip())
+    return lines
+
+
+def _config_epilog(model: type[BaseModel]) -> str:
+    return "Configuration keys (JSON/TOML):\n" + "\n".join(_config_help(model))
+
+
 def _finish(message: str) -> None:
     typer.echo(message)
 
@@ -87,7 +113,11 @@ def validate_data(
     _finish(f"Validated {len(subjects)} subjects" + (" (dry run)" if dry_run else ""))
 
 
-@app.command("preprocess", help="Preprocess the indexed dataset.")
+@app.command(
+    "preprocess",
+    help="Preprocess the indexed dataset.",
+    epilog=_config_epilog(PreprocessCommandConfig),
+)
 def preprocess_command(
     config: Annotated[Path, typer.Option(..., exists=True, dir_okay=False)],
     dry_run: Annotated[bool, typer.Option(help="Validate configuration without writing outputs.")] = False,
@@ -120,7 +150,11 @@ def train_command(
     _finish(f"Training artifacts written under {experiment_dir}")
 
 
-@app.command("infer", help="Run detector and student inference for a volume.")
+@app.command(
+    "infer",
+    help="Run detector and student inference for a volume.",
+    epilog=_config_epilog(InferCommandConfig),
+)
 def infer_command(
     config: Annotated[Path, typer.Option(..., exists=True, dir_okay=False)],
     dry_run: Annotated[bool, typer.Option(help="Validate configuration without writing outputs.")] = False,
@@ -140,7 +174,11 @@ def infer_command(
     _finish(f"Wrote prediction artifacts under {result['mask_path']}")
 
 
-@app.command("evaluate", help="Evaluate source-space predictions against references.")
+@app.command(
+    "evaluate",
+    help="Evaluate source-space predictions against references.",
+    epilog=_config_epilog(EvaluateCommandConfig),
+)
 def evaluate_command(
     config: Annotated[Path, typer.Option(..., exists=True, dir_okay=False)],
     dry_run: Annotated[bool, typer.Option(help="Validate configuration without writing outputs.")] = False,

@@ -19,6 +19,15 @@ def test_root_and_command_help() -> None:
         assert result.exit_code == 0, result.output
 
 
+def test_typed_command_help_documents_config_keys() -> None:
+    result = runner.invoke(app, ["infer", "--help"])
+    assert result.exit_code == 0, result.output
+    output = " ".join(result.output.split())
+    assert "Configuration keys" in output
+    assert "detector.initial_channels" in output
+    assert "patch_batch_size" in output
+
+
 def test_preprocess_dry_run_writes_no_outputs(tmp_path: Path) -> None:
     dataset_dir = tmp_path / "dataset"
     manifest_dir = dataset_dir / "manifests"
