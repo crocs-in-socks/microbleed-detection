@@ -11,10 +11,11 @@ from ..config import (
     EvaluateCommandConfig,
     InferCommandConfig,
     PreprocessCommandConfig,
+    TrainCommandConfig,
 )
 from ..pipelines import evaluate, infer, preprocess, train
 from . import index_data
-from .config import load_config, path_value, require_keys
+from .config import load_config
 from .errors import domain_errors
 
 _ConfigModel = TypeVar("_ConfigModel", bound=BaseModel)
@@ -44,12 +45,6 @@ def _configure_logging(
         handlers=[RichHandler(rich_tracebacks=True, show_path=False)],
         force=True,
     )
-
-
-def _config(path: Path, required: tuple[str, ...]) -> dict:
-    config = load_config(path)
-    require_keys(config, required)
-    return config
 
 
 def _parse_config(path: Path, model: type[_ConfigModel]) -> _ConfigModel:
@@ -135,22 +130,27 @@ def preprocess_command(
     _finish(f"Preprocessed artifacts written under {dataset_dir}")
 
 
-@app.command("train", help="Train detector, teacher, and student models.")
+@app.command(
+    "train",
+    help="Train detector, teacher, and student models.",
+    epilog=_config_epilog(TrainCommandConfig),
+)
 def train_command(
     config: Annotated[Path, typer.Option(..., exists=True, dir_okay=False)],
     dry_run: Annotated[bool, typer.Option(help="Validate configuration without writing outputs.")] = False,
 ) -> None:
-    values = _config(config, ("dataset_dir", "experiment_dir", "datasplit_parameters", "detector_parameters", "discriminator_teacher_parameters", "discriminator_student_parameters"))
-    dataset_dir = path_value(values, "dataset_dir")
-    experiment_dir = Path(values["experiment_dir"])
-    if not (dataset_dir / "manifests" / "preprocessed.json").is_file():
+    settings = _parse_config(config, TrainCommandConfig)
+    if not (settings.dataset_dir / "manifests" / "preprocessed.json").is_file():
         raise typer.BadParameter("dataset_dir has no preprocessed manifest")
     if dry_run:
-        _finish(f"Training configuration valid; outputs would use {experiment_dir} (dry run)")
+        _finish(
+            "Training configuration valid; outputs would use "
+            f"{settings.experiment_dir} (dry run)"
+        )
         return
     with domain_errors():
-        train.execute(dataset_dir, experiment_dir, values["datasplit_parameters"], values["detector_parameters"], values["discriminator_teacher_parameters"], values["discriminator_student_parameters"])
-    _finish(f"Training artifacts written under {experiment_dir}")
+        train.execute(settings)
+    _finish(f"Training artifacts written under {settings.experiment_dir}")
 
 
 @app.command(
