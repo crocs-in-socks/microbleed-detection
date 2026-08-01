@@ -1,8 +1,11 @@
 from pathlib import Path
+from collections.abc import Callable
 
 import gc
 import torch
 import torch.nn.functional as F
+from skimage.measure import label
+from skimage.measure import regionprops
 
 from ..core import utils as core_utils
 from ..core.common.models import CandidateDetector 
@@ -17,7 +20,7 @@ def delete_model(model):
         torch.cuda.empty_cache()
 
 
-def collect_patches(subjects: list, subject_patcher: function, patcher_parameters: dict):
+def collect_patches(subjects: list, subject_patcher: Callable, patcher_parameters: dict):
     patches = []
     for subject in subjects:
         patches.extend(subject_patcher(subject, **patcher_parameters))
@@ -48,9 +51,17 @@ def patch_subject_target_centered(subject: dict, patch_dir: Path, patch_size: in
     logits = core_processor.infer(model, device, volume)
     output = F.softmax(logits, dim=1)
     output = output.cpu().numpy()[0, 1] # 0 to remove batch, and index 1 for output channel
-    output = (output > threshold).astype(int)
+    candidate_mask = (output > threshold).astype(np.uint8)
+    candidate_labels = label(candidate_mask, connectivity=3)
+    candidate_probabilities = {
+        region.label: float(output[candidate_labels == region.label].mean())
+        for region in regionprops(candidate_labels)
+    }
 
-    patches = core_patchers.target_centered_patcher(volume, mask, patch_size)
+    patches = core_patchers.target_centered_patcher(volume, mask, candidate_mask, patch_size)
+    for patch_data in patches:
+        candidate_id = patch_data["candidate_id"]
+        patch_data["candidate_probability"] = candidate_probabilities[candidate_id]
     patches = core_patchers.materialize_patches(patches, patch_dir, subject_id, augmentation_factor)
 
     return patches
