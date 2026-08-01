@@ -303,3 +303,27 @@ class PreprocessCommandConfig(FrozenConfig):
             "(all steps enabled)."
         ),
     )
+
+
+class EvaluationSubject(FrozenConfig):
+    subject_id: str = Field(description="Identifier used in the evaluation report.")
+    prediction_path: Path = Field(
+        description="Source-space predicted lesion mask for this subject.",
+    )
+    reference_path: Path = Field(
+        description="Source-space reference (ground-truth) lesion mask.",
+    )
+
+
+class EvaluateCommandConfig(FrozenConfig):
+    subjects: tuple[EvaluationSubject, ...] = Field(
+        min_length=1,
+        description="Subjects to evaluate; each pairs a prediction with a reference.",
+    )
+    output_dir: Path = Field(
+        description="Directory to write evaluation.json and the metric CSVs.",
+    )
+    metadata: dict[str, str] | None = Field(
+        default=None,
+        description="Optional free-form metadata recorded in the report header.",
+    )

@@ -3,6 +3,7 @@ import logging
 from pathlib import Path
 from typing import Any, Iterable
 
+from ..config import EvaluationSubject
 from ..core import utils
 from ..core.evaluation.matching import match_components
 from ..core.evaluation.metrics import aggregate_metrics
@@ -11,19 +12,19 @@ logger = logging.getLogger(__name__)
 
 
 def evaluate_subjects(
-    subjects: Iterable[dict[str, Any]],
+    subjects: Iterable[EvaluationSubject],
     output_dir: Path,
     metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
     subject_results = []
     for subject in subjects:
-        prediction = utils.nifti_to_numpy(utils.load_volume(Path(subject["prediction_path"])))
-        reference = utils.nifti_to_numpy(utils.load_volume(Path(subject["reference_path"])))
+        prediction = utils.nifti_to_numpy(utils.load_volume(subject.prediction_path))
+        reference = utils.nifti_to_numpy(utils.load_volume(subject.reference_path))
         if prediction.shape != reference.shape:
-            raise ValueError(f"prediction and reference shapes differ for {subject['subject_id']}")
+            raise ValueError(f"prediction and reference shapes differ for {subject.subject_id}")
         result = match_components(prediction > 0, reference > 0)
-        result["subject_id"] = subject["subject_id"]
+        result["subject_id"] = subject.subject_id
         subject_results.append(result)
 
     aggregate = aggregate_metrics(subject_results)
