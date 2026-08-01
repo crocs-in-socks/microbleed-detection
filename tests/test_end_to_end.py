@@ -66,3 +66,17 @@ def test_synthetic_evaluate_workflow_completes(tmp_path: Path) -> None:
     assert result.exit_code == 0, result.output
     report = json.loads((output_dir / "evaluation.json").read_text(encoding="utf-8"))
     assert report["aggregate"]["true_positives"] == 1
+
+
+def test_write_provenance_captures_config_and_seed(tmp_path: Path) -> None:
+    import torch
+
+    from microbleednet.config import PreprocessingConfig
+    from microbleednet.provenance import ProvenanceRecord, write_provenance
+
+    config = PreprocessingConfig()
+    path = write_provenance(tmp_path, config, seed=1234, device=torch.device("cpu"))
+    record = ProvenanceRecord.model_validate_json(path.read_text(encoding="utf-8"))
+    assert record.seed == 1234
+    assert record.configuration == config.model_dump(mode="json")
+    assert record.device == "cpu"
