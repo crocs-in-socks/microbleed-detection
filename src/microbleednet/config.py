@@ -9,49 +9,161 @@ class FrozenConfig(BaseModel):
 
 
 class DataConfig(FrozenConfig):
-    modality: Literal["T2*-GRE", "SWI"]
-    require_masks: bool = True
+    modality: Literal["T2*-GRE", "SWI"] = Field(
+        description=(
+            "Input MRI modality. Only T2*-GRE and SWI are supported; QSM is rejected."
+        ),
+    )
+    require_masks: bool = Field(
+        default=True,
+        description=(
+            "Require a lesion mask for every subject "
+            "(needed for training and evaluation)."
+        ),
+    )
 
 
 class PreprocessingConfig(FrozenConfig):
-    canonical_orientation: bool = True
-    extract_brain: bool = True
-    bias_field_correction: bool = True
-    invert_volume: bool = True
-    inpaint_vessels: bool = True
+    canonical_orientation: bool = Field(
+        default=True,
+        description="Reorient to canonical (RAS-like) axis order before processing.",
+    )
+    extract_brain: bool = Field(
+        default=True,
+        description="Skull-strip with FSL BET (requires 'bet' on PATH).",
+    )
+    bias_field_correction: bool = Field(
+        default=True,
+        description=(
+            "Apply SimpleITK N4 bias-field correction "
+            "(paper deviation from FSL FAST)."
+        ),
+    )
+    invert_volume: bool = Field(
+        default=True,
+        description="Invert normalized intensities so microbleeds appear bright.",
+    )
+    inpaint_vessels: bool = Field(
+        default=True,
+        description=(
+            "Remove and inpaint vessel-like structures before candidate detection."
+        ),
+    )
 
 
 class AugmentationConfig(FrozenConfig):
-    translation_offset_range: tuple[int, int] = (-15, 15)
-    noise_variance_range: tuple[float, float] = (0.01, 0.04)
-    blur_sigma_range: tuple[float, float] = (0.1, 0.2)
+    translation_offset_range: tuple[int, int] = Field(
+        default=(-15, 15),
+        description=(
+            "Random translation range in voxels, applied to both axes. "
+            "Paper: (-15, 15)."
+        ),
+    )
+    noise_variance_range: tuple[float, float] = Field(
+        default=(0.01, 0.04),
+        description=(
+            "Gaussian noise variance range (intensity units). Paper: (0.01, 0.04)."
+        ),
+    )
+    blur_sigma_range: tuple[float, float] = Field(
+        default=(0.1, 0.2),
+        description="Gaussian blur sigma range in voxels. Paper: (0.1, 0.2).",
+    )
 
 
 class ModelConfig(FrozenConfig):
-    initial_channels: int = Field(gt=0)
-    input_channels: int = Field(gt=0)
-    output_classes: int = Field(ge=2)
-    dropout_rate: float = Field(ge=0.0, lt=1.0)
+    initial_channels: int = Field(
+        gt=0,
+        description="Initial convolution channel depth of the 3D U-Net. Paper: 64.",
+    )
+    input_channels: int = Field(
+        gt=0,
+        description="Number of input channels (image plus FRST). Paper: 2.",
+    )
+    output_classes: int = Field(
+        ge=2,
+        description="Number of segmentation/classification output classes. Paper: 2.",
+    )
+    dropout_rate: float = Field(
+        ge=0.0,
+        lt=1.0,
+        description="Dropout probability in the classifier head, in [0, 1).",
+    )
 
 
 class DetectorConfig(ModelConfig):
-    patch_size: int = Field(gt=0)
-    augmentation_factor: int = Field(ge=1)
-    probability_threshold: float = Field(ge=0.0, le=1.0)
+    patch_size: int = Field(
+        gt=0,
+        description=(
+            "Cubic training patch edge length in voxels for the detector. Paper: 48."
+        ),
+    )
+    augmentation_factor: int = Field(
+        ge=1,
+        description=(
+            "Multiplier for detector training data via augmentation. Paper: 10."
+        ),
+    )
+    probability_threshold: float = Field(
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Detector foreground probability threshold for candidates, in [0, 1]."
+        ),
+    )
 
 
 class TeacherConfig(ModelConfig):
-    patch_size: int = Field(gt=0)
-    augmentation_factor: int = Field(ge=1)
+    patch_size: int = Field(
+        gt=0,
+        description=(
+            "Cubic training patch edge length in voxels for the teacher. Paper: 24."
+        ),
+    )
+    augmentation_factor: int = Field(
+        ge=1,
+        description="Multiplier for teacher training data via augmentation. Paper: 5.",
+    )
 
 
 class StudentConfig(ModelConfig):
-    patch_size: int = Field(gt=0)
-    augmentation_factor: int = Field(ge=1)
-    probability_threshold: float = Field(ge=0.0, le=1.0)
-    temperature: float = Field(gt=0.0)
-    alpha: float = Field(ge=0.0, le=1.0)
-    beta: float = Field(ge=0.0, le=1.0)
+    patch_size: int = Field(
+        gt=0,
+        description=(
+            "Cubic training patch edge length in voxels for the student. Paper: 24."
+        ),
+    )
+    augmentation_factor: int = Field(
+        ge=1,
+        description="Multiplier for student training data via augmentation. Paper: 5.",
+    )
+    probability_threshold: float = Field(
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Student (discriminator) acceptance probability threshold, in [0, 1]."
+        ),
+    )
+    temperature: float = Field(
+        gt=0.0,
+        description="Distillation softmax temperature T. Paper: 4.",
+    )
+    alpha: float = Field(
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Weight of the supervised loss term. Paper: 0.4. "
+            "Must satisfy alpha + beta = 1."
+        ),
+    )
+    beta: float = Field(
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Weight of the distillation loss term. Paper: 0.6. "
+            "Must satisfy alpha + beta = 1."
+        ),
+    )
 
     @model_validator(mode="after")
     def validate_loss_weights(self) -> "StudentConfig":
@@ -61,25 +173,84 @@ class StudentConfig(ModelConfig):
 
 
 class TrainerConfig(FrozenConfig):
-    learning_rate: float = Field(gt=0.0)
-    adam_epsilon: float = Field(gt=0.0)
-    batch_size: int = Field(ge=2)
-    max_epochs: int = Field(gt=0)
-    patience: int = Field(ge=0)
-    learning_rate_factor: float = Field(gt=0.0, lt=1.0)
-    learning_rate_period: int = Field(gt=0)
-    minimum_learning_rate: float = Field(gt=0.0)
+    learning_rate: float = Field(
+        gt=0.0,
+        description="Initial Adam learning rate. Paper: 1e-3.",
+    )
+    adam_epsilon: float = Field(
+        gt=0.0,
+        description="Adam epsilon for numerical stability. Paper: 1e-4.",
+    )
+    batch_size: int = Field(
+        ge=2,
+        description=(
+            "Training batch size (must be at least 2 for balanced sampling). Paper: 8."
+        ),
+    )
+    max_epochs: int = Field(
+        gt=0,
+        description="Maximum number of training epochs. Paper: 100.",
+    )
+    patience: int = Field(
+        ge=0,
+        description=(
+            "Early-stopping patience in epochs without validation improvement. "
+            "Paper: 20."
+        ),
+    )
+    learning_rate_factor: float = Field(
+        gt=0.0,
+        lt=1.0,
+        description=(
+            "Multiplicative learning-rate decay factor, in (0, 1). Paper: 0.1."
+        ),
+    )
+    learning_rate_period: int = Field(
+        gt=0,
+        description="Number of epochs between learning-rate decays. Paper: 2.",
+    )
+    minimum_learning_rate: float = Field(
+        gt=0.0,
+        description="Learning-rate floor below which decay stops. Paper: 1e-6.",
+    )
 
 
 class PostprocessingConfig(FrozenConfig):
-    minimum_volume_mm3: float = Field(gt=0.0)
-    maximum_eccentricity: float = Field(ge=0.0, le=1.0)
-    minimum_boundary_distance_voxels: float = Field(ge=0.0)
+    minimum_volume_mm3: float = Field(
+        gt=0.0,
+        description=(
+            "Reject candidate components smaller than this physical volume in mm^3. "
+            "Paper: 2.5."
+        ),
+    )
+    maximum_eccentricity: float = Field(
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Reject candidates more elongated than this eccentricity, in [0, 1]. "
+            "Paper: 0.2."
+        ),
+    )
+    minimum_boundary_distance_voxels: float = Field(
+        ge=0.0,
+        description=(
+            "Reject candidates nearer than this distance (in voxels) to the "
+            "brain boundary."
+        ),
+    )
 
 
 class EvaluationConfig(FrozenConfig):
-    detector_thresholds: tuple[float, ...]
-    discriminator_thresholds: tuple[float, ...]
+    detector_thresholds: tuple[float, ...] = Field(
+        description=(
+            "Detector probability thresholds to sweep for FROC, each in [0, 1]."
+        ),
+    )
+    discriminator_thresholds: tuple[float, ...] = Field(
+        description=(
+            "Discriminator probability thresholds to sweep for FROC, each in [0, 1]."
+        ),
+    )
 
     @model_validator(mode="after")
     def validate_thresholds(self) -> "EvaluationConfig":
