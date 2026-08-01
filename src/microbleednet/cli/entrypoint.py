@@ -6,11 +6,11 @@ import typer
 
 from . import index_data
 from .config import load_config, path_value, require_keys
-from ..pipelines import evaluate, predict, preprocess, train
+from ..pipelines import evaluate, infer, preprocess, train
 
 app = typer.Typer(
     name="microbleednet",
-    help="Research workflow for indexing, preprocessing, training, prediction, and evaluation.",
+    help="Research workflow for indexing, preprocessing, training, inference, and evaluation.",
     no_args_is_help=True,
 )
 
@@ -80,8 +80,8 @@ def train_command(
     _finish(f"Training artifacts written under {experiment_dir}")
 
 
-@app.command("predict", help="Run detector and student prediction for a volume.")
-def predict_command(
+@app.command("infer", help="Run detector and student inference for a volume.")
+def infer_command(
     config: Annotated[Path, typer.Option(..., exists=True, dir_okay=False)],
     dry_run: Annotated[bool, typer.Option(help="Validate configuration without writing outputs.")] = False,
 ) -> None:
@@ -90,9 +90,9 @@ def predict_command(
     detector_checkpoint = path_value(values, "detector_checkpoint")
     student_checkpoint = path_value(values, "student_checkpoint")
     if dry_run:
-        _finish(f"Prediction configuration valid for {volume_path} (dry run)")
+        _finish(f"Inference configuration valid for {volume_path} (dry run)")
         return
-    result = predict.execute(
+    result = infer.execute(
         volume_path=volume_path,
         output_dir=Path(values["output_dir"]),
         model_parameters=values["model_parameters"],
