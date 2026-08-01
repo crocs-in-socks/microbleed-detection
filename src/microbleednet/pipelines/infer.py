@@ -7,6 +7,7 @@ import torch
 import torch.nn.functional as F
 from skimage.measure import label, regionprops
 
+from .. import provenance
 from ..config import (
     DetectorConfig,
     InferCommandConfig,
@@ -138,6 +139,16 @@ def predict_volume(
 
 
 def execute(config: InferCommandConfig) -> dict:
+    device = torch.device(config.device)
+    config.output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Seed and record provenance before any prediction is written, so every
+    # output directory can be traced back to its config, seed, and revision.
+    provenance.seed_everything(config.seed)
+    provenance.write_provenance(
+        config.output_dir, config, seed=config.seed, device=device
+    )
+
     return predict_volume(
         volume_path=config.volume_path,
         output_dir=config.output_dir,
@@ -146,7 +157,7 @@ def execute(config: InferCommandConfig) -> dict:
         detector_checkpoint=config.detector_checkpoint,
         student_checkpoint=config.student_checkpoint,
         preprocessing=config.preprocessing,
-        device=torch.device(config.device),
+        device=device,
         patch_batch_size=config.patch_batch_size,
         subject_id=config.subject_id,
     )

@@ -154,6 +154,93 @@ def test_run_stage_writes_failed_manifest_and_reraises(tmp_path: Path) -> None:
     assert "checkpoint_dir" not in manifest
 
 
+def test_train_emits_provenance_before_training(tmp_path: Path) -> None:
+    import pytest
+
+    from microbleednet.config import TrainCommandConfig
+    from microbleednet.pipelines import train
+
+    dataset_dir = tmp_path / "dataset"
+    manifest_dir = dataset_dir / "manifests"
+    manifest_dir.mkdir(parents=True)
+    subjects = [
+        {"subject_id": f"s{index}", "mask_path": str(tmp_path / f"s{index}.nii.gz")}
+        for index in range(5)
+    ]
+    (manifest_dir / "preprocessed.json").write_text(
+        json.dumps({"subjects": subjects}), encoding="utf-8"
+    )
+    experiment_dir = tmp_path / "experiment"
+    settings = TrainCommandConfig.model_validate(
+        {**_train_config_dict(dataset_dir, experiment_dir), "seed": 7}
+    )
+
+    # Provenance must be recorded before any training runs; stub the first stage
+    # so the run fails immediately after the record is written.
+    def _boom(*_args, **_kwargs):
+        raise RuntimeError("stop after provenance")
+
+    original = train.train_detector
+    train.train_detector = _boom  # type: ignore[assignment]
+    try:
+        with pytest.raises(RuntimeError, match="stop after provenance"):
+            train.execute(settings)
+    finally:
+        train.train_detector = original  # type: ignore[assignment]
+
+    provenance_path = experiment_dir / "provenance.json"
+    assert provenance_path.exists()
+    record = json.loads(provenance_path.read_text(encoding="utf-8"))
+    assert record["seed"] == 7
+    assert record["configuration"] == settings.model_dump(mode="json")
+
+
+def test_infer_emits_provenance_before_prediction(tmp_path: Path) -> None:
+    from microbleednet.config import InferCommandConfig
+    from microbleednet.pipelines import infer
+
+    model_block = {
+        "initial_channels": 64,
+        "input_channels": 2,
+        "output_classes": 2,
+        "dropout_rate": 0.5,
+    }
+    output_dir = tmp_path / "prediction"
+    settings = InferCommandConfig.model_validate(
+        {
+            "volume_path": str(tmp_path / "volume.nii.gz"),
+            "output_dir": str(output_dir),
+            "detector_checkpoint": str(tmp_path / "detector.pth"),
+            "student_checkpoint": str(tmp_path / "student.pth"),
+            "detector": {**model_block, "patch_size": 48, "augmentation_factor": 10,
+                         "probability_threshold": 0.0},
+            "student": {**model_block, "patch_size": 24, "augmentation_factor": 5,
+                        "probability_threshold": 0.0, "temperature": 4.0,
+                        "alpha": 0.4, "beta": 0.6},
+            "seed": 11,
+        }
+    )
+
+    calls: dict[str, bool] = {}
+
+    def _fake_predict(**_kwargs):
+        # Provenance must already be on disk before any prediction is produced.
+        calls["provenance_first"] = (output_dir / "provenance.json").exists()
+        return {"subject_id": "volume"}
+
+    original = infer.predict_volume
+    infer.predict_volume = _fake_predict  # type: ignore[assignment]
+    try:
+        infer.execute(settings)
+    finally:
+        infer.predict_volume = original  # type: ignore[assignment]
+
+    assert calls["provenance_first"] is True
+    record = json.loads((output_dir / "provenance.json").read_text(encoding="utf-8"))
+    assert record["seed"] == 11
+    assert record["configuration"] == settings.model_dump(mode="json")
+
+
 def test_write_provenance_captures_config_and_seed(tmp_path: Path) -> None:
     import torch
 

@@ -46,11 +46,11 @@ order, not a hard requirement; each slice states its own dependencies.
 | 02 | Document config keys in CLI help                  | low    | 10         | done   |
 | 03 | Logging: stdlib in core/pipelines, Rich in cli    | medium | —          | done   |
 | 04 | Error-handling boundary                           | medium | 03         | done   |
-| 05 | Remove constants drift (aug + distillation)       | medium | 10         | todo (blocked on 11) |
+| 05 | Remove constants drift (aug + distillation)       | medium | 10         | done   |
 | 06 | Dissolve remaining constants files into models    | medium | 05         | todo   |
 | 07 | Isolate optional / heavy dependencies             | low    | —          | done   |
 | 08 | Replace loose dicts at layer boundaries           | high   | 10         | todo   |
-| 09 | Provenance as a first-class output                | medium | —          | partial (typed record done; emission wiring → 11) |
+| 09 | Provenance as a first-class output                | medium | —          | done (typed record + train emission wiring) |
 | 11 | Typed config for the `train` command              | high   | 10         | done   |
 
 Slices 01, 03, 07 are the safest starting points. **Slice 10 is the
