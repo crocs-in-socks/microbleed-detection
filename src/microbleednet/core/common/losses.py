@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -34,26 +35,26 @@ class KnowledgeDistillationLoss(nn.Module):
     
 
 class DetectorLoss(nn.Module):
-    """
-    dice loss + weighted voxel-wise cross entropy loss
-    """
     def __init__(self, dice_smooth=constants.common.losses.dice.default.smooth):
         super().__init__()
         self.dice_loss = DiceLoss(smooth=dice_smooth)
-        self.cross_entropy_loss = nn.CrossEntropyLoss(reduction="none") # no reduction so that we can apply weights
+        self.register_buffer("class_weights", torch.tensor([1.0, 10.0]))
 
-    def forward(self, logits, target, voxel_weights=None):
+    def forward(self, logits, target):
+        expected_shape = (logits.size(0), *logits.shape[2:])
+        if target.shape != expected_shape:
+            raise ValueError(f"target must have shape {expected_shape}")
+        if target.dtype != torch.long:
+            raise ValueError("class-index targets must use torch.int64")
+        if torch.any((target < 0) | (target > 1)):
+            raise ValueError("class-index targets must contain only 0 and 1")
         prediction = F.softmax(logits, dim=1)
-        dice_loss = self.dice_loss(prediction[:, 1], target[:, 1])
-
-        cross_entropy_loss = self.cross_entropy_loss(logits, target)
-
-        if voxel_weights is not None:
-            voxel_weights = voxel_weights.to(logits.device)
-            cross_entropy_loss = cross_entropy_loss * voxel_weights
-
-        cross_entropy_loss = cross_entropy_loss.mean()
-
+        dice_loss = self.dice_loss(prediction[:, 1], target == 1)
+        cross_entropy_loss = F.cross_entropy(
+            logits, target.to(logits.device),
+            weight=self.class_weights.to(logits.device, logits.dtype),
+            reduction="mean",
+        )
         return dice_loss + cross_entropy_loss
 
 class DiscriminatorTeacherLoss(nn.Module):
@@ -63,11 +64,17 @@ class DiscriminatorTeacherLoss(nn.Module):
     def __init__(self, dice_smooth=constants.common.losses.dice.default.smooth):
         super().__init__()
         self.segmentation_loss = DetectorLoss(dice_smooth)
-        self.classification_loss = nn.BCEWithLogitsLoss()
+        self.classification_loss = nn.CrossEntropyLoss()
 
-    def forward(self, classification_logits, classification_target, segmentation_logits, segmentation_target, voxel_weights=None):
-        segmentation_loss = self.segmentation_loss(segmentation_logits, segmentation_target, voxel_weights)
-        classification_loss = self.classification_loss(classification_logits, classification_target)
+    def forward(self, classification_logits, classification_target, segmentation_logits, segmentation_target):
+        if classification_target.shape != (classification_logits.size(0),):
+            raise ValueError("classification targets must have shape (batch,)")
+        if classification_target.dtype != torch.long:
+            raise ValueError("classification targets must use torch.int64")
+        segmentation_loss = self.segmentation_loss(segmentation_logits, segmentation_target)
+        classification_loss = self.classification_loss(
+            classification_logits, classification_target.to(classification_logits.device)
+        )
 
         return segmentation_loss + classification_loss
 
@@ -88,7 +95,9 @@ class DiscriminatorStudentLoss(nn.Module):
         self.knowledge_distillation_loss = KnowledgeDistillationLoss(temperature)
     
     def forward(self, teacher_logits, student_logits, target):
-        cross_entropy_loss = self.cross_entropy_loss(student_logits, target)
+        if target.shape != (student_logits.size(0),) or target.dtype != torch.long:
+            raise ValueError("classification targets must be int64 with shape (batch,)")
+        cross_entropy_loss = self.cross_entropy_loss(student_logits, target.to(student_logits.device))
         knowledge_distillation_loss = self.knowledge_distillation_loss(teacher_logits, student_logits)
 
         return self.alpha * cross_entropy_loss + self.beta * knowledge_distillation_loss

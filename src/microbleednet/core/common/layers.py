@@ -20,7 +20,7 @@ class SingleConv(nn.Module):
             nn.ReLU(inplace=True),
         )
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.layer(x)
 
 
@@ -50,7 +50,7 @@ class DoubleConv(nn.Module):
             SingleConv(intermediate_channels, out_channels, kernel_size_2, padding_2),
         )
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.layer(x)
 
 
@@ -72,7 +72,7 @@ class DownConv(nn.Module):
             DoubleConv(in_channels, out_channels, kernel_size_1, kernel_size_2),
         )
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.layer(x)
 
 
@@ -85,13 +85,13 @@ class UpConv(nn.Module):
         self.upsample = nn.ConvTranspose3d(in_channels, in_channels // 2, kernel_size, stride=2)
         self.conv = DoubleConv(in_channels, out_channels, 3, 1)
 
-    def forward(self, x1, x2):
+    def forward(self, x1: torch.Tensor, x2: torch.Tensor) -> torch.Tensor:
 
         x1 = self.upsample(x1)
 
-        diffZ = x2.size()[2] - x1.size()[2]
-        diffY = x2.size()[3] - x1.size()[3]
-        diffX = x2.size()[4] - x1.size()[4]
+        diff_z = x2.size()[2] - x1.size()[2]
+        diff_y = x2.size()[3] - x1.size()[3]
+        diff_x = x2.size()[4] - x1.size()[4]
 
         # if you have padding issues, see
         # https://github.com/HaiyongJiang/U-Net-Pytorch-Unstructured-Buggy/commit/0e854509c2cea854e247a9c615f175f76fbb2e3a
@@ -100,12 +100,12 @@ class UpConv(nn.Module):
         x1 = F.pad(
             x1,
             [
-                diffX // 2,
-                diffX - diffX // 2,
-                diffY // 2,
-                diffY - diffY // 2,
-                diffZ // 2,
-                diffZ - diffZ // 2,
+                diff_x // 2,
+                diff_x - diff_x // 2,
+                diff_y // 2,
+                diff_y - diff_y // 2,
+                diff_z // 2,
+                diff_z - diff_z // 2,
             ],
         )
 
@@ -121,5 +121,5 @@ class OutConv(nn.Module):
         super().__init__()
         self.layer = nn.Conv3d(in_channels, out_channels, kernel_size=1)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.layer(x)
