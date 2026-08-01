@@ -5,13 +5,15 @@ from datetime import datetime
 import nibabel as nib
 
 from . import constants
+from ..config import PreprocessingConfig
 from ..core import utils
 from ..core.engines import processor
 
 def execute(
     dataset_dir: Path,
-    preprocessor_parameters: dict
+    preprocessing: PreprocessingConfig,
 ) -> None:
+    preprocessor_parameters = preprocessing.model_dump()
     raw_manifest_path = dataset_dir / constants.manifests.raw
     with open(raw_manifest_path, "r") as raw_manifest_file:
         raw_manifest_content = json.load(raw_manifest_file)
