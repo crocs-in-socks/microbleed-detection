@@ -3,6 +3,7 @@ import hashlib
 import torch
 from torch.utils.data import Dataset
 
+from microbleednet.config import AugmentationConfig
 from microbleednet.core.transforms.augmentations import augment
 
 
@@ -10,10 +11,12 @@ class BasePatchDataset(Dataset):
     def __init__(
         self,
         patches: list,
-        perform_augmentation: bool = False
+        perform_augmentation: bool = False,
+        augmentation: AugmentationConfig | None = None,
     ):
         self.patches = patches
         self.perform_augmentation = perform_augmentation
+        self.augmentation = augmentation or AugmentationConfig()
 
     def __len__(self):
         return len(self.patches)
@@ -48,7 +51,10 @@ class SegmentationPatchDataset(BasePatchDataset):
         x = patch["volume"]
         y = patch["mask"]
         if self.perform_augmentation:
-            x, y = augment(x, y, mask_indices=(1,), rng=np.random.default_rng(idx))
+            x, y = augment(
+                x, y, augmentation=self.augmentation,
+                mask_indices=(1,), rng=np.random.default_rng(idx),
+            )
 
         x = np.expand_dims(x, axis=0) # Shape: (1, H, W, D)
 
@@ -65,7 +71,10 @@ class SegmentationClassificationPatchDataset(BasePatchDataset):
         mask = patch["mask"]
         label = patch["has_microbleed"]
         if self.perform_augmentation:
-            volume, mask = augment(volume, mask, mask_indices=(1,), rng=np.random.default_rng(idx))
+            volume, mask = augment(
+                volume, mask, augmentation=self.augmentation,
+                mask_indices=(1,), rng=np.random.default_rng(idx),
+            )
 
         volume = np.expand_dims(volume, axis=0) # Shape: (1, H, W, D)
         return {
@@ -81,7 +90,7 @@ class ClassificationPatchDataset(BasePatchDataset):
         x = patch["volume"]
         y = patch["has_microbleed"]
         if self.perform_augmentation:
-            (x,) = augment(x)  # Unpack the tuple returned by augment
+            (x,) = augment(x, augmentation=self.augmentation)  # Unpack the tuple
 
         x = np.expand_dims(x, axis=0) # Shape: (1, H, W, D)
         return {
