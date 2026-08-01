@@ -329,6 +329,67 @@ class EvaluateCommandConfig(FrozenConfig):
     )
 
 
+class DataSplitConfig(FrozenConfig):
+    test_size: float = Field(
+        gt=0.0,
+        lt=1.0,
+        description=(
+            "Fraction of subjects held out for validation/early-stopping, "
+            "in (0, 1). Paper: 0.2."
+        ),
+    )
+    random_state: int = Field(
+        default=42,
+        description="Seed for the train/validation split. Paper: 42.",
+    )
+    shuffle: bool = Field(
+        default=True,
+        description="Shuffle subjects before splitting.",
+    )
+
+
+class TrainCommandConfig(FrozenConfig):
+    dataset_dir: Path = Field(
+        description=(
+            "Indexed dataset directory containing manifests/preprocessed.json."
+        ),
+    )
+    experiment_dir: Path = Field(
+        description=(
+            "Directory to write per-stage patches, checkpoints, and manifests."
+        ),
+    )
+    detector: DetectorConfig = Field(
+        description="Candidate-detector model configuration (its own block).",
+    )
+    teacher: TeacherConfig = Field(
+        description="Discriminator-teacher model configuration (its own block).",
+    )
+    student: StudentConfig = Field(
+        description="Discriminator-student model configuration (its own block).",
+    )
+    trainer: TrainerConfig = Field(
+        description="Optimizer/epoch/early-stopping hyperparameters shared by stages.",
+    )
+    datasplit: DataSplitConfig = Field(
+        default_factory=lambda: DataSplitConfig(test_size=0.2),
+        description="Train/validation split settings.",
+    )
+    device: str = Field(
+        default="cpu",
+        description="Torch device string, e.g. 'cpu' or 'cuda'.",
+    )
+    num_workers: int = Field(
+        default=0,
+        ge=0,
+        description="DataLoader worker processes. 0 keeps loading in-process.",
+    )
+    pin_memory: bool = Field(
+        default=False,
+        description="Pin DataLoader host memory (only helps with CUDA).",
+    )
+
+
 class InferCommandConfig(FrozenConfig):
     volume_path: Path = Field(description="Input source-space volume to run inference on.")
     output_dir: Path = Field(

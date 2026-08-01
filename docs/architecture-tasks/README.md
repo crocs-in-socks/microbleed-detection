@@ -42,7 +42,7 @@ order, not a hard requirement; each slice states its own dependencies.
 | #  | Slice                                             | Risk   | Depends on | Status |
 | -- | ------------------------------------------------- | ------ | ---------- | ------ |
 | 01 | Rename `predict` → `infer`                        | low    | —          | done   |
-| 10 | Connect typed config models to CLI + pipelines    | high   | —          | done (preprocess/evaluate/infer; train carved to 11) |
+| 10 | Connect typed config models to CLI + pipelines    | high   | —          | done (train completed in 11) |
 | 02 | Document config keys in CLI help                  | low    | 10         | done   |
 | 03 | Logging: stdlib in core/pipelines, Rich in cli    | medium | —          | done   |
 | 04 | Error-handling boundary                           | medium | 03         | done   |
@@ -51,7 +51,7 @@ order, not a hard requirement; each slice states its own dependencies.
 | 07 | Isolate optional / heavy dependencies             | low    | —          | done   |
 | 08 | Replace loose dicts at layer boundaries           | high   | 10         | todo   |
 | 09 | Provenance as a first-class output                | medium | —          | partial (typed record done; emission wiring → 11) |
-| 11 | Typed config for the `train` command              | high   | 10         | todo   |
+| 11 | Typed config for the `train` command              | high   | 10         | done   |
 
 Slices 01, 03, 07 are the safest starting points. **Slice 10 is the
 foundational refactor**: it connects the orphaned `config.py` models to the

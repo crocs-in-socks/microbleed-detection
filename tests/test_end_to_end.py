@@ -28,6 +28,15 @@ def test_typed_command_help_documents_config_keys() -> None:
     assert "patch_batch_size" in output
 
 
+def test_train_help_documents_config_keys() -> None:
+    result = runner.invoke(app, ["train", "--help"])
+    assert result.exit_code == 0, result.output
+    output = " ".join(result.output.split())
+    assert "Configuration keys" in output
+    assert "detector.initial_channels" in output
+    assert "datasplit.test_size" in output
+
+
 def test_preprocess_dry_run_writes_no_outputs(tmp_path: Path) -> None:
     dataset_dir = tmp_path / "dataset"
     manifest_dir = dataset_dir / "manifests"
@@ -68,32 +77,78 @@ def test_synthetic_evaluate_workflow_completes(tmp_path: Path) -> None:
     assert report["aggregate"]["true_positives"] == 1
 
 
+def _train_config_dict(dataset_dir: Path, experiment_dir: Path) -> dict:
+    model_block = {
+        "initial_channels": 64,
+        "input_channels": 2,
+        "output_classes": 2,
+        "dropout_rate": 0.5,
+    }
+    return {
+        "dataset_dir": str(dataset_dir),
+        "experiment_dir": str(experiment_dir),
+        "detector": {**model_block, "patch_size": 48, "augmentation_factor": 10,
+                     "probability_threshold": 0.0},
+        "teacher": {**model_block, "patch_size": 24, "augmentation_factor": 5},
+        "student": {**model_block, "patch_size": 24, "augmentation_factor": 5,
+                    "probability_threshold": 0.0, "temperature": 4.0,
+                    "alpha": 0.4, "beta": 0.6},
+        "trainer": {"learning_rate": 0.001, "adam_epsilon": 0.0001, "batch_size": 8,
+                    "max_epochs": 100, "patience": 20, "learning_rate_factor": 0.1,
+                    "learning_rate_period": 2, "minimum_learning_rate": 0.000001},
+    }
+
+
+def test_train_dry_run_writes_no_outputs(tmp_path: Path) -> None:
+    dataset_dir = tmp_path / "dataset"
+    manifest_dir = dataset_dir / "manifests"
+    manifest_dir.mkdir(parents=True)
+    (manifest_dir / "preprocessed.json").write_text(
+        json.dumps({"subjects": []}), encoding="utf-8"
+    )
+    experiment_dir = tmp_path / "experiment"
+    config_path = tmp_path / "train.json"
+    config_path.write_text(
+        json.dumps(_train_config_dict(dataset_dir, experiment_dir)), encoding="utf-8"
+    )
+
+    result = runner.invoke(app, ["train", "--config", str(config_path), "--dry-run"])
+    assert result.exit_code == 0, result.output
+    assert not experiment_dir.exists()
+
+
 def test_run_stage_writes_failed_manifest_and_reraises(tmp_path: Path) -> None:
     import pytest
+    import torch
 
+    from microbleednet.config import TrainCommandConfig
     from microbleednet.pipelines import train
 
     experiment_dir = tmp_path / "experiment"
-    parameters = train._stage_parameters({}, experiment_dir, "detector")
+    settings = TrainCommandConfig.model_validate(
+        _train_config_dict(experiment_dir, experiment_dir)
+    )
+    runtime = train._stage_runtime(experiment_dir, torch.device("cpu"), "detector")
 
     def _failing_patcher(subject, **_kwargs):
         raise ValueError("synthetic patcher failure")
 
     with pytest.raises(ValueError, match="synthetic patcher failure"):
         train._run_stage(
-            "detector",
+            runtime,
             [{"subject_id": "s1"}],
             [{"subject_id": "s2"}],
-            parameters,
+            settings.trainer,
+            settings,
             model=None,
             task=None,
             patcher=_failing_patcher,
+            patcher_parameters={"patch_size": 48},
             dataset_class=None,
-            experiment_dir=experiment_dir,
+            augmentation_factor=1,
         )
 
-    manifest_path = experiment_dir / "manifests" / "detector.json"
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest = json.loads(runtime.manifest_path.read_text(encoding="utf-8"))
     assert manifest["status"] == "failed"
     assert manifest["error"]
     assert "checkpoint_dir" not in manifest

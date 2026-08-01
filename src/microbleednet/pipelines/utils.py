@@ -1,16 +1,17 @@
-from pathlib import Path
-from collections.abc import Callable
-
 import gc
+from collections.abc import Callable
+from pathlib import Path
+
+import numpy as np
 import torch
 import torch.nn.functional as F
-from skimage.measure import label
-from skimage.measure import regionprops
+from skimage.measure import label, regionprops
 
 from ..core import utils as core_utils
-from ..core.common.models import CandidateDetector 
-from ..core.engines import processor as core_processor
+from ..core.common.models import CandidateDetector
 from ..core.dataloading import patchers as core_patchers
+from ..core.engines import processor as core_processor
+
 
 def delete_model(model):
     del model
