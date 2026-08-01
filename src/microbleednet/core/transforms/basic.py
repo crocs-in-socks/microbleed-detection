@@ -1,9 +1,10 @@
 import os
 import tempfile
 import subprocess
-import numpy as np
-import nibabel as nib
 from pathlib import Path
+
+import nibabel as nib
+import numpy as np
 import SimpleITK as sitk
 
 from scipy.ndimage import gaussian_filter
@@ -12,11 +13,10 @@ from .. import utils
 
 
 def normalize_volume(volume: np.ndarray) -> np.ndarray:
-    volume = volume - np.min(volume)
-    if np.max(volume) > 0:
-        volume = volume / np.max(volume)
-    return volume
-
+    maximum = np.max(volume)
+    if not np.isfinite(maximum) or maximum <= 0:
+        raise ValueError("volume is empty or its maximum is not positive and finite")
+    return volume / maximum
 
 def invert_volume(volume: np.ndarray) -> np.ndarray:
     brain_mask = (volume > 0).astype(int)
@@ -25,7 +25,11 @@ def invert_volume(volume: np.ndarray) -> np.ndarray:
     return volume
 
 
-def tight_crop_volume(volume: np.ndarray) -> tuple[np.ndarray, tuple]:
+def tight_crop_volume(
+    volume: np.ndarray,
+) -> tuple[np.ndarray, tuple[tuple[int, int], tuple[int, int], tuple[int, int]]]:
+    if volume.ndim != 3:
+        raise ValueError("volume must be a 3D array")
     dim0_sum = np.sum(volume, axis=(1, 2))
     dim1_sum = np.sum(volume, axis=(0, 2))
     dim2_sum = np.sum(volume, axis=(0, 1))
@@ -34,7 +38,10 @@ def tight_crop_volume(volume: np.ndarray) -> tuple[np.ndarray, tuple]:
     d1_start, d1_end = find_bounds_1d(dim1_sum)
     d2_start, d2_end = find_bounds_1d(dim2_sum)
 
-    bounding_box = (
+    if not np.any(volume > 0):
+        raise ValueError("cannot crop an empty volume")
+
+    bounding_box: tuple[tuple[int, int], tuple[int, int], tuple[int, int]] = (
         (int(d0_start), int(d0_end + 1)),
         (int(d1_start), int(d1_end + 1)),
         (int(d2_start), int(d2_end + 1)),
@@ -72,6 +79,15 @@ def reorient_to_std(volume: nib.Nifti1Image) -> nib.Nifti1Image:
     return nib.as_closest_canonical(volume)
 
 
+def crop_affine(
+    affine: np.ndarray,
+    crop_start: tuple[int, int, int],
+) -> np.ndarray:
+    translation = np.eye(4)
+    translation[:3, 3] = crop_start
+    return affine @ translation
+
+
 def extract_brain(volume: nib.Nifti1Image) -> nib.Nifti1Image:
     fsldir = Path(os.getenv("FSLDIR", ""))
     if not fsldir.is_dir():
@@ -98,7 +114,7 @@ def extract_brain(volume: nib.Nifti1Image) -> nib.Nifti1Image:
         return volume
 
 
-def bias_field_correct(volume: nib.Nifti1Image) -> nib.Nifti1Image:
+def bias_field_correct_n4(volume: nib.Nifti1Image) -> nib.Nifti1Image:
     volume_data = utils.nifti_to_numpy(volume).astype(float)
 
     # Transpose for SimpleITK coordinate system
@@ -120,89 +136,3 @@ def bias_field_correct(volume: nib.Nifti1Image) -> nib.Nifti1Image:
 def calculate_voxel_weights(volume: np.ndarray) -> np.ndarray:
     return gaussian_filter(volume, 1.2) * 10
 
-def _fsl_process(
-    volume: nib.Nifti1Image,
-    reorient_to_std: bool,
-    extract_brain: bool,
-    bias_field_correct: bool,
-    verbose: bool,
-) -> nib.Nifti1Image:
-    """
-    Preprocess a NIfTI volume using FSL tools.
-
-    Args:
-        volume: The input NIfTI volume.
-        reorient_to_std: Whether to reorient the volume to standard orientation.
-        extract_brain: Whether to extract the brain from the volume.
-        bias_field_correct: Whether to correct for bias field inhomogeneities.
-        verbose: Enable verbose output.
-
-    Returns:
-        The preprocessed NIfTI image.
-    """
-
-    fsldir = os.getenv("FSLDIR")
-    if not fsldir:
-        raise EnvironmentError("FSLDIR environment variable is not set.")
-
-    fsldir = Path(fsldir)
-
-    with tempfile.TemporaryDirectory(prefix="microbleednet-fsl-process-") as temp_dir:
-        temp_dir = Path(temp_dir)
-        temp_volume_path = temp_dir / "temp_volume.nii.gz"
-        nib.save(volume, temp_volume_path)
-
-        if reorient_to_std:
-            reoriented_path = temp_dir / "reoriented.nii.gz"
-            subprocess.run(
-                [
-                    str(fsldir / "bin" / "fslreorient2std"),
-                    str(temp_volume_path),
-                    str(reoriented_path),
-                ],
-                check=True,
-            )
-            temp_volume_path = reoriented_path
-
-            if verbose:
-                print(f"Reoriented volume saved to: {reoriented_path}")
-
-        if extract_brain:
-            brain_extracted_path = temp_dir / "brain_extracted.nii.gz"
-            subprocess.run(
-                [
-                    str(fsldir / "bin" / "bet"),
-                    str(temp_volume_path),
-                    str(brain_extracted_path),
-                ],
-                check=True,
-            )
-            temp_volume_path = brain_extracted_path
-
-            if verbose:
-                print(f"Brain extracted volume saved to: {brain_extracted_path}")
-
-        if bias_field_correct:
-            bias_corrected_path = temp_volume_path
-            while bias_corrected_path.suffix:
-                bias_corrected_path = bias_corrected_path.with_suffix("")
-            bias_corrected_path = bias_corrected_path.with_name(
-                bias_corrected_path.name + "_restore.nii.gz"
-            )
-
-            subprocess.run(
-                [str(fsldir / "bin" / "fast"), "-B", "--nopve", str(temp_volume_path)],
-                check=True,
-            )
-            temp_volume_path = bias_corrected_path
-
-            if verbose:
-                print(f"Bias corrected volume saved to: {bias_corrected_path}")
-
-        processed_volume = nib.load(temp_volume_path)
-        processed_volume = nib.Nifti1Image(
-            processed_volume.get_fdata(),
-            processed_volume.affine,
-            processed_volume.header,
-        )
-        return processed_volume

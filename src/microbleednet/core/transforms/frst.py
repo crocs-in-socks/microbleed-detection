@@ -1,13 +1,14 @@
 import math
 import torch
 import torchvision.transforms.functional as F
+from collections.abc import Sequence
 
 from .. import constants
 
 
 def apply(
     volumes: torch.Tensor, 
-    radii: list = constants.transforms.frst.radii, 
+    radii: Sequence[float] = constants.transforms.frst.radii,
     alpha: float = constants.transforms.frst.alpha, 
     factor_std: float = constants.transforms.frst.factor_std, 
     bright: bool = constants.transforms.frst.bright, 
@@ -18,10 +19,17 @@ def apply(
     Input: volumes (Batch, 1, H, W, D)
     Output: frst_volumes (Batch, 1, H, W, D)
     """
-    B, C, H, W, D = volumes.shape
+    if volumes.ndim != 5 or volumes.shape[1] != 1:
+        raise ValueError("volumes must have shape (B, 1, H, W, D)")
+    if not volumes.is_floating_point():
+        raise TypeError("volumes must use a floating-point dtype")
+    if not radii or any(radius <= 0 for radius in radii):
+        raise ValueError("radii must contain positive values")
 
-    slices = volumes.permute(0, 4, 2, 3, 1).reshape(-1, H, W) # New Shape: (B*D, H, W)
-    N = slices.shape[0] # Number of slices
+    batch_size, channels, height, width, depth = volumes.shape
+
+    slices = volumes.permute(0, 4, 2, 3, 1).reshape(-1, height, width)
+    slice_count = slices.shape[0]
 
     grad_y, grad_x = torch.gradient(slices, dim=(1, 2))
     g_norm = torch.sqrt(grad_x**2 + grad_y**2)
@@ -37,41 +45,43 @@ def apply(
     xx = coords[:, 2]
 
     offset = int(math.ceil(max(radii))) if len(radii) > 0 else 0
-    out_H = H + 2 * offset
-    out_W = W + 2 * offset
+    out_height = height + 2 * offset
+    out_width = width + 2 * offset
 
-    output = torch.zeros((N, out_H, out_W), device=volumes.device, dtype=volumes.dtype)
+    output = torch.zeros((slice_count, out_height, out_width), device=volumes.device, dtype=volumes.dtype)
 
     for radius in radii:
-        O_n = torch.zeros((N, out_H, out_W), device=volumes.device, dtype=volumes.dtype)
-        M_n = torch.zeros((N, out_H, out_W), device=volumes.device, dtype=volumes.dtype)
+        orientation = torch.zeros((slice_count, out_height, out_width), device=volumes.device, dtype=volumes.dtype)
+        magnitude = torch.zeros((slice_count, out_height, out_width), device=volumes.device, dtype=volumes.dtype)
         gp_y = torch.round((grad_y_significant / g_norm_significant) * radius).long()
         gp_x = torch.round((grad_x_significant / g_norm_significant) * radius).long()
 
         if bright:
             pos_y = yy + gp_y + offset
             pos_x = xx + gp_x + offset
+            if torch.any(pos_y < 0) or torch.any(pos_y >= out_height) or torch.any(pos_x < 0) or torch.any(pos_x >= out_width):
+                raise IndexError("FRST scatter index is outside the padded output")
             
             # Flatten 3D indices to 1D for scatter_add_
-            idx_bright = nn * (out_H * out_W) + pos_y * out_W + pos_x
-            O_n.view(-1).scatter_add_(0, idx_bright, torch.ones_like(idx_bright, dtype=volumes.dtype))
-            M_n.view(-1).scatter_add_(0, idx_bright, g_norm_significant)
+            idx_bright = nn * (out_height * out_width) + pos_y * out_width + pos_x
+            orientation.view(-1).scatter_add_(0, idx_bright, torch.ones_like(idx_bright, dtype=volumes.dtype))
+            magnitude.view(-1).scatter_add_(0, idx_bright, g_norm_significant)
 
         if dark:
             neg_y = yy - gp_y + offset
             neg_x = xx - gp_x + offset
             
-            idx_dark = nn * (out_H * out_W) + neg_y * out_W + neg_x
-            O_n.view(-1).scatter_add_(0, idx_dark, -torch.ones_like(idx_dark, dtype=volumes.dtype))
-            M_n.view(-1).scatter_add_(0, idx_dark, -g_norm_significant)
+            idx_dark = nn * (out_height * out_width) + neg_y * out_width + neg_x
+            orientation.view(-1).scatter_add_(0, idx_dark, -torch.ones_like(idx_dark, dtype=volumes.dtype))
+            magnitude.view(-1).scatter_add_(0, idx_dark, -g_norm_significant)
 
-        O_n = torch.abs(O_n)
-        O_n = normalize_tensor_slicewise(O_n)
+        orientation = torch.abs(orientation)
+        orientation = normalize_tensor_slicewise(orientation)
 
-        M_n = torch.abs(M_n)
-        M_n = normalize_tensor_slicewise(M_n)
+        magnitude = torch.abs(magnitude)
+        magnitude = normalize_tensor_slicewise(magnitude)
 
-        S_n = (O_n ** alpha) * M_n
+        response = (orientation ** alpha) * magnitude
 
         sigma = radius * factor_std
         if sigma > 0:
@@ -79,20 +89,18 @@ def apply(
             rad_int = int(4.0 * sigma + 0.5)
             kernel_size = 2 * rad_int + 1
             
-            S_n = S_n.unsqueeze(1) # F.gaussian_blur expects (..., C, H, W). We add and remove a dummy channel dimension. 
-            S_n = F.gaussian_blur(S_n, kernel_size=[kernel_size, kernel_size], sigma=[sigma, sigma])
-            output += S_n.squeeze(1)
+            response = response.unsqueeze(1)
+            response = F.gaussian_blur(response, kernel_size=[kernel_size, kernel_size], sigma=[sigma, sigma])
+            output += response.squeeze(1)
         else:
-            output += S_n
+            output += response
 
-    if len(radii) > 0:
-        output = output / len(radii)
+    output = output / len(radii)
 
-    if offset > 0:
-        output = output[:, offset:-offset, offset:-offset]
+    output = output[:, offset:-offset, offset:-offset]
 
     # Reshape back to (Batch, 1, Height, Width, Depth)
-    output = output.view(B, D, H, W).unsqueeze(1).permute(0, 1, 3, 4, 2)
+    output = output.view(batch_size, depth, height, width).unsqueeze(1).permute(0, 1, 3, 4, 2)
     return output
 
 

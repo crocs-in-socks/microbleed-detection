@@ -70,8 +70,8 @@ class CropTransform:
                 raise ValueError(f"invalid crop bounds on axis {axis}")
         _validate_affine("source_affine", self.source_affine)
         _validate_affine("canonical_affine", self.canonical_affine)
-        if self.orientation_transform.shape != (4, 4):
-            raise ValueError("orientation_transform must be a 4 x 4 matrix")
+        if self.orientation_transform.shape != (3, 2):
+            raise ValueError("orientation_transform must be a 3 x 2 orientation array")
 
 
 @dataclass(frozen=True)
