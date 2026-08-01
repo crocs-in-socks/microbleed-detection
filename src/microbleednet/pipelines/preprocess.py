@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
-from datetime import datetime 
+from datetime import datetime
+
+import nibabel as nib
 
 from . import constants
 from ..core import utils
@@ -23,43 +25,43 @@ def execute(
 
     preprocessed_subjects = []
 
-    try:
-        for subject in raw_subjects:
-            subject_id = subject["subject_id"]
-            raw_volume_path = subject["volume_path"]
-            raw_mask_path = subject.get("mask_path")
+    for subject in raw_subjects:
+        subject_id = subject["subject_id"]
+        raw_volume_path = subject["volume_path"]
+        raw_mask_path = subject.get("mask_path")
 
-            raw_volume = utils.load_volume(raw_volume_path)
-            raw_mask = utils.load_volume(raw_mask_path) if raw_mask_path else None
+        raw_volume = utils.load_volume(raw_volume_path)
+        raw_mask = utils.load_volume(raw_mask_path) if raw_mask_path else None
 
-            output = processor.preprocess(raw_volume, raw_mask, **preprocessor_parameters)
+        output = processor.preprocess(raw_volume, raw_mask, **preprocessor_parameters)
 
-            preprocessed_volume = utils.numpy_to_nifti(output["volume"])
-            preprocessed_volume_path = volumes_dir / f"{subject_id}{constants.preprocess.volume_suffix}"
-            utils.save_volume(preprocessed_volume, preprocessed_volume_path)
+        preprocessed_volume = nib.Nifti1Image(output.image, output.geometry.affine)
+        preprocessed_volume_path = volumes_dir / f"{subject_id}{constants.preprocess.volume_suffix}"
+        utils.save_volume(preprocessed_volume, preprocessed_volume_path)
 
-            if raw_mask is not None:
-                preprocessed_mask = utils.numpy_to_nifti(output["mask"])
-                preprocessed_mask_path = masks_dir / f"{subject_id}{constants.preprocess.mask_suffix}"
-                utils.save_volume(preprocessed_mask, preprocessed_mask_path)
+        if raw_mask is not None:
+            if output.mask is None:
+                raise ValueError(f"preprocessing returned no mask for {subject_id}")
+            preprocessed_mask = nib.Nifti1Image(output.mask, output.geometry.affine)
+            preprocessed_mask_path = masks_dir / f"{subject_id}{constants.preprocess.mask_suffix}"
+            utils.save_volume(preprocessed_mask, preprocessed_mask_path)
 
-            preprocessed_subject = {
-                "subject_id": subject_id,
-                "volume_path": str(preprocessed_volume_path.resolve()),
-                "mask_path": str(preprocessed_mask_path.resolve()) if raw_mask is not None else None,
-                "bounding_box": output["bounding_box"]
-            }
+        preprocessed_subject = {
+            "subject_id": subject_id,
+            "volume_path": str(preprocessed_volume_path.resolve()),
+            "mask_path": str(preprocessed_mask_path.resolve()) if raw_mask is not None else None,
+            "bounding_box": [list(bounds) for bounds in zip(
+                output.transform.crop_start, output.transform.crop_stop
+            )],
+        }
 
-            preprocessed_subjects.append(preprocessed_subject)
+        preprocessed_subjects.append(preprocessed_subject)
 
-    finally:
         preprocessed_manifest_path = dataset_dir / constants.manifests.preprocessed
         preprocessed_manifest_data = {
             "stage": "preprocessed",
             "created_on": datetime.now().isoformat(),
             "preprocess_parameters": preprocessor_parameters,
-            "subjects": preprocessed_subjects
+            "subjects": preprocessed_subjects,
         }
-
-        with open(preprocessed_manifest_path, mode="w") as preprocessed_manifest_file:
-            json.dump(preprocessed_manifest_data, preprocessed_manifest_file)
+        utils.write_json_atomic(preprocessed_manifest_path, preprocessed_manifest_data)

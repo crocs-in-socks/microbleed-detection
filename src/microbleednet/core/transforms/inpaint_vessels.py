@@ -1,5 +1,4 @@
 import numpy as np
-from scipy.spatial import KDTree
 from skimage.measure import label
 from skimage.filters import frangi
 from scipy.ndimage import convolve
@@ -44,16 +43,15 @@ def get_volume_vessel_mask(volume: np.ndarray) -> np.ndarray:
     return vessel_mask
 
 
-def get_slice_vessel_mask(slice: np.ndarray) -> None:
+def get_slice_vessel_mask(image_slice: np.ndarray) -> np.ndarray:
 
-    brain_mask = (slice > 0).astype(int)
+    brain_mask = (image_slice > 0).astype(int)
 
-    if np.min(slice) == np.max(slice) or len(np.unique(slice)) < 2:
-        # slice is empty, so skip it
-        return np.zeros_like(slice)
+    if not np.any(brain_mask) or np.min(image_slice) == np.max(image_slice):
+        return np.zeros_like(image_slice)
 
     frangi_slice = frangi(
-        slice,
+        image_slice,
         sigmas=constants.transforms.frangi.sigmas,
         alpha=constants.transforms.frangi.alpha,
         beta=constants.transforms.frangi.beta,
@@ -61,7 +59,7 @@ def get_slice_vessel_mask(slice: np.ndarray) -> None:
     )
     frangi_slice = frangi_slice * brain_mask
 
-    linearity = get_linearity_measure(slice)
+    linearity = get_linearity_measure(image_slice)
     linearity = linearity * brain_mask
     linearity -= np.min(linearity)
     if np.max(linearity) > 0:
@@ -131,28 +129,6 @@ def inpaint_with_neighborhood_mean(volume: np.ndarray, mask: np.ndarray) -> np.n
         if resolved_voxels == 0:
             break
 
-    return inpainted_volume
-
-def inpaint_with_nearest_n(volume: np.ndarray, mask: np.ndarray, n: int) -> np.ndarray:
-    mask = mask.astype(bool)
-    if not np.any(mask) or np.all(mask):
-        return volume.copy()
-
-    inpainted_volume = volume.copy()
-    source_coords = np.argwhere(~mask)
-    target_coords = np.argwhere(mask)
-
-    source_values = volume[~mask]
-    n = min(n, len(source_coords))
-    tree = KDTree(source_coords)
-
-    distances, indices = tree.query(target_coords, k=n)
-
-    if n == 1:
-        inpainted_volume[mask] = source_values[indices]
-    else:
-        nearest_intensities = source_values[indices]
-        mean_intensities = np.mean(nearest_intensities, axis=1)
-        inpainted_volume[mask] = mean_intensities
-    
+    if np.any(working_mask):
+        raise ValueError("vessel mask contains unresolved voxels after inpainting")
     return inpainted_volume
