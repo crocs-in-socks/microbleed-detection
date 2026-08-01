@@ -7,6 +7,7 @@ import torch
 from sklearn.model_selection import train_test_split
 from torch.utils.data import BatchSampler, DataLoader, SequentialSampler
 
+from .. import provenance
 from ..config import (
     DetectorConfig,
     ModelConfig,
@@ -384,6 +385,13 @@ def execute(config: TrainCommandConfig) -> None:
 
     device = torch.device(config.device)
     config.experiment_dir.mkdir(parents=True, exist_ok=True)
+
+    # Seed and record provenance before any artifact is written, so a run that
+    # fails mid-training is still traceable to its config, seed, and revision.
+    provenance.seed_everything(config.seed)
+    provenance.write_provenance(
+        config.experiment_dir, config, seed=config.seed, device=device
+    )
 
     detector_checkpoint = train_detector(
         train_subjects,

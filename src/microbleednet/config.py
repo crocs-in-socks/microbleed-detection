@@ -383,6 +383,13 @@ class TrainCommandConfig(FrozenConfig):
         default="cpu",
         description="Torch device string, e.g. 'cpu' or 'cuda'.",
     )
+    seed: int = Field(
+        default=1,
+        description=(
+            "Experiment seed. Seeds Python/NumPy/PyTorch and derives worker "
+            "seeds, and is recorded in the run provenance."
+        ),
+    )
     num_workers: int = Field(
         default=0,
         ge=0,
@@ -418,6 +425,13 @@ class InferCommandConfig(FrozenConfig):
     device: str = Field(
         default="cpu",
         description="Torch device string, e.g. 'cpu' or 'cuda'.",
+    )
+    seed: int = Field(
+        default=1,
+        description=(
+            "Experiment seed. Seeds Python/NumPy/PyTorch and is recorded in the "
+            "run provenance for traceability."
+        ),
     )
     patch_batch_size: int = Field(
         default=8,
