@@ -4,13 +4,43 @@ import platform
 import random
 import subprocess
 from pathlib import Path
-from typing import Any, Callable, Iterable, Optional
+from typing import Any, Iterable, Optional
 
 import numpy as np
 import torch
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 from microbleednet.core import utils
+
+
+class ProvenanceRecord(BaseModel):
+    """Immutable record of the environment and configuration behind a run."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    configuration: dict[str, Any] = Field(
+        description="The validated run configuration, serialized to JSON.",
+    )
+    seed: int = Field(description="Random seed used to make the run reproducible.")
+    python_version: str = Field(description="CPython version string.")
+    dependencies: dict[str, str] = Field(
+        description="Installed versions of key packages at run time.",
+    )
+    pytorch_version: str = Field(description="Torch version string.")
+    cuda_version: str | None = Field(
+        description="CUDA toolkit version, if built with CUDA.",
+    )
+    device: str = Field(description="Torch device the run executed on.")
+    device_name: str | None = Field(
+        description="Human-readable CUDA device name, if any.",
+    )
+    source_revision: str | None = Field(description="Git HEAD revision, if available.")
+    source_dirty: bool | None = Field(
+        description="Whether the working tree had uncommitted changes.",
+    )
+    deterministic_algorithms: bool = Field(
+        description="Whether torch deterministic algorithms were enabled.",
+    )
 
 
 def seed_everything(seed: int, deterministic: bool = False) -> None:
@@ -61,7 +91,7 @@ def capture_provenance(
     config: BaseModel | dict[str, Any],
     seed: int,
     device: torch.device,
-) -> dict[str, Any]:
+) -> ProvenanceRecord:
     if isinstance(config, BaseModel):
         config_data = config.model_dump(mode="json")
     else:
@@ -72,19 +102,19 @@ def capture_provenance(
         device_name = torch.cuda.get_device_name(device)
 
     source_revision, source_dirty = _source_state()
-    return {
-        "configuration": config_data,
-        "seed": seed,
-        "python_version": platform.python_version(),
-        "dependencies": _dependency_versions(),
-        "pytorch_version": torch.__version__,
-        "cuda_version": torch.version.cuda,
-        "device": str(device),
-        "device_name": device_name,
-        "source_revision": source_revision,
-        "source_dirty": source_dirty,
-        "deterministic_algorithms": torch.are_deterministic_algorithms_enabled(),
-    }
+    return ProvenanceRecord(
+        configuration=config_data,
+        seed=seed,
+        python_version=platform.python_version(),
+        dependencies=_dependency_versions(),
+        pytorch_version=torch.__version__,
+        cuda_version=torch.version.cuda,
+        device=str(device),
+        device_name=device_name,
+        source_revision=source_revision,
+        source_dirty=source_dirty,
+        deterministic_algorithms=torch.are_deterministic_algorithms_enabled(),
+    )
 
 
 def write_provenance(
@@ -94,7 +124,8 @@ def write_provenance(
     device: torch.device,
 ) -> Path:
     path = run_directory / "provenance.json"
-    utils.write_json_atomic(path, capture_provenance(config, seed, device))
+    record = capture_provenance(config, seed, device)
+    utils.write_json_atomic(path, record.model_dump(mode="json"))
     return path
 
 
