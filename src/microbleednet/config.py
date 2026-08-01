@@ -327,3 +327,39 @@ class EvaluateCommandConfig(FrozenConfig):
         default=None,
         description="Optional free-form metadata recorded in the report header.",
     )
+
+
+class InferCommandConfig(FrozenConfig):
+    volume_path: Path = Field(description="Input source-space volume to run inference on.")
+    output_dir: Path = Field(
+        description="Directory to write the predicted mask, probability map, and records.",
+    )
+    detector_checkpoint: Path = Field(
+        description="Trained candidate-detector checkpoint (.pth).",
+    )
+    student_checkpoint: Path = Field(
+        description="Trained candidate-discriminator student checkpoint (.pth).",
+    )
+    detector: DetectorConfig = Field(
+        description="Detector model configuration (its own parameter block).",
+    )
+    student: StudentConfig = Field(
+        description="Student model configuration (its own parameter block).",
+    )
+    preprocessing: PreprocessingConfig = Field(
+        default_factory=PreprocessingConfig,
+        description="Preprocessing steps applied to the input volume before inference.",
+    )
+    device: str = Field(
+        default="cpu",
+        description="Torch device string, e.g. 'cpu' or 'cuda'.",
+    )
+    patch_batch_size: int = Field(
+        default=8,
+        gt=0,
+        description="Number of candidate patches scored per student forward pass.",
+    )
+    subject_id: str | None = Field(
+        default=None,
+        description="Identifier for outputs; defaults to the volume filename stem.",
+    )

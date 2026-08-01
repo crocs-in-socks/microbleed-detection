@@ -1,17 +1,20 @@
 import logging
 from pathlib import Path
 from typing import TypeVar
-from typing_extensions import Annotated
 
-import torch
 import typer
 from pydantic import BaseModel, ValidationError
 from rich.logging import RichHandler
+from typing_extensions import Annotated
 
+from ..config import (
+    EvaluateCommandConfig,
+    InferCommandConfig,
+    PreprocessCommandConfig,
+)
+from ..pipelines import evaluate, infer, preprocess, train
 from . import index_data
 from .config import load_config, path_value, require_keys
-from ..config import EvaluateCommandConfig, PreprocessCommandConfig
-from ..pipelines import evaluate, infer, preprocess, train
 
 _ConfigModel = TypeVar("_ConfigModel", bound=BaseModel)
 
@@ -122,25 +125,18 @@ def infer_command(
     config: Annotated[Path, typer.Option(..., exists=True, dir_okay=False)],
     dry_run: Annotated[bool, typer.Option(help="Validate configuration without writing outputs.")] = False,
 ) -> None:
-    values = _config(config, ("volume_path", "output_dir", "model_parameters", "detector_checkpoint", "student_checkpoint", "preprocess_parameters"))
-    volume_path = path_value(values, "volume_path")
-    detector_checkpoint = path_value(values, "detector_checkpoint")
-    student_checkpoint = path_value(values, "student_checkpoint")
+    settings = _parse_config(config, InferCommandConfig)
+    for label, path in (
+        ("volume_path", settings.volume_path),
+        ("detector_checkpoint", settings.detector_checkpoint),
+        ("student_checkpoint", settings.student_checkpoint),
+    ):
+        if not path.exists():
+            raise typer.BadParameter(f"configured path does not exist ({label}): {path}")
     if dry_run:
-        _finish(f"Inference configuration valid for {volume_path} (dry run)")
+        _finish(f"Inference configuration valid for {settings.volume_path} (dry run)")
         return
-    result = infer.execute(
-        volume_path=volume_path,
-        output_dir=Path(values["output_dir"]),
-        model_parameters=values["model_parameters"],
-        detector_checkpoint=detector_checkpoint,
-        student_checkpoint=student_checkpoint,
-        preprocess_parameters=values["preprocess_parameters"],
-        device=torch.device(values.get("device", "cpu")),
-        detector_threshold=values.get("detector_threshold", 0.5),
-        student_threshold=values.get("student_threshold", 0.5),
-        patch_batch_size=values.get("patch_batch_size", 8),
-    )
+    result = infer.execute(settings)
     _finish(f"Wrote prediction artifacts under {result['mask_path']}")
 
 

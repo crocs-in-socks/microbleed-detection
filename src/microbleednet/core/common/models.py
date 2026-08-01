@@ -13,7 +13,7 @@ def weight_init(model):
 
 
 class CandidateDetector(nn.Module):
-    def __init__(self, in_channels: int, n_classes: int, initial_channels: int):
+    def __init__(self, input_channels: int, output_classes: int, initial_channels: int):
         super().__init__()
 
         level_channels = [
@@ -23,8 +23,8 @@ class CandidateDetector(nn.Module):
             initial_channels * 4,
         ]
 
-        self.feature_extractor = FeatureExtractor(in_channels, level_channels)
-        self.segmentor = Segmentor(level_channels, n_classes)
+        self.feature_extractor = FeatureExtractor(input_channels, level_channels)
+        self.segmentor = Segmentor(level_channels, output_classes)
 
         self.apply(weight_init)
 
@@ -37,8 +37,8 @@ class CandidateDetector(nn.Module):
 class CandidateDiscriminatorTeacher(nn.Module):
     def __init__(
         self,
-        in_channels: int,
-        n_classes: int,
+        input_channels: int,
+        output_classes: int,
         initial_channels: int,
         dropout_rate: float,
     ):
@@ -51,9 +51,9 @@ class CandidateDiscriminatorTeacher(nn.Module):
             initial_channels * 4,
         ]
 
-        self.feature_extractor = FeatureExtractor(in_channels, level_channels)
-        self.segmentor = Segmentor(level_channels, n_classes)
-        self.classifier = Classifier(level_channels[3], n_classes, dropout_rate)
+        self.feature_extractor = FeatureExtractor(input_channels, level_channels)
+        self.segmentor = Segmentor(level_channels, output_classes)
+        self.classifier = Classifier(level_channels[3], output_classes, dropout_rate)
 
         self.apply(weight_init)
 
@@ -66,8 +66,8 @@ class CandidateDiscriminatorTeacher(nn.Module):
 class CandidateDiscriminatorStudent(nn.Module):
     def __init__(
         self,
-        in_channels: int,
-        n_classes: int,
+        input_channels: int,
+        output_classes: int,
         initial_channels: int,
         dropout_rate: float,
     ):
@@ -80,8 +80,8 @@ class CandidateDiscriminatorStudent(nn.Module):
             initial_channels * 4,
         ]
 
-        self.feature_extractor = FeatureExtractor(in_channels, level_channels)
-        self.classifier = Classifier(level_channels[3], n_classes, dropout_rate)
+        self.feature_extractor = FeatureExtractor(input_channels, level_channels)
+        self.classifier = Classifier(level_channels[3], output_classes, dropout_rate)
 
         self.apply(weight_init)
 

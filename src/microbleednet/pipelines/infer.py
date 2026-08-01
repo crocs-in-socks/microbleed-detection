@@ -7,6 +7,12 @@ import torch
 import torch.nn.functional as F
 from skimage.measure import label, regionprops
 
+from ..config import (
+    DetectorConfig,
+    InferCommandConfig,
+    PreprocessingConfig,
+    StudentConfig,
+)
 from ..core import utils
 from ..core.common.models import CandidateDetector, CandidateDiscriminatorStudent
 from ..core.engines import processor
@@ -14,9 +20,24 @@ from ..core.transforms import frst
 from ..core.transforms.patch import _extract_fixed_patch
 
 
-def _load_models(model_parameters: dict, detector_checkpoint: Path, student_checkpoint: Path, device: torch.device):
-    detector = CandidateDetector(**model_parameters)
-    student = CandidateDiscriminatorStudent(**model_parameters)
+def _load_models(
+    detector_config: DetectorConfig,
+    student_config: StudentConfig,
+    detector_checkpoint: Path,
+    student_checkpoint: Path,
+    device: torch.device,
+):
+    detector = CandidateDetector(
+        input_channels=detector_config.input_channels,
+        output_classes=detector_config.output_classes,
+        initial_channels=detector_config.initial_channels,
+    )
+    student = CandidateDiscriminatorStudent(
+        input_channels=student_config.input_channels,
+        output_classes=student_config.output_classes,
+        initial_channels=student_config.initial_channels,
+        dropout_rate=student_config.dropout_rate,
+    )
     utils.load_model_weights(detector, device, detector_checkpoint)
     utils.load_model_weights(student, device, student_checkpoint)
     return detector.to(device).eval(), student.to(device).eval()
@@ -53,22 +74,25 @@ def _student_probabilities(student, patches: list[np.ndarray], device: torch.dev
 def predict_volume(
     volume_path: Path,
     output_dir: Path,
-    model_parameters: dict,
+    detector_config: DetectorConfig,
+    student_config: StudentConfig,
     detector_checkpoint: Path,
     student_checkpoint: Path,
-    preprocess_parameters: dict,
+    preprocessing: PreprocessingConfig,
     device: torch.device = torch.device("cpu"),
-    detector_threshold: float = 0.5,
-    student_threshold: float = 0.5,
     patch_batch_size: int = 8,
     subject_id: str | None = None,
 ) -> dict:
     if patch_batch_size <= 0:
         raise ValueError("patch_batch_size must be positive")
+    detector_threshold = detector_config.probability_threshold
+    student_threshold = student_config.probability_threshold
     subject_id = subject_id or Path(volume_path).name.split(".")[0]
     image = utils.load_volume(volume_path)
-    processed = processor.preprocess(image, None, **preprocess_parameters)
-    detector, student = _load_models(model_parameters, detector_checkpoint, student_checkpoint, device)
+    processed = processor.preprocess(image, None, **preprocessing.model_dump())
+    detector, student = _load_models(
+        detector_config, student_config, detector_checkpoint, student_checkpoint, device
+    )
 
     detector_logits = processor.infer(detector, device, processed.image)
     detector_probability = F.softmax(detector_logits, dim=1).cpu().numpy()[0, 1]
@@ -113,5 +137,16 @@ def predict_volume(
     return {"subject_id": subject_id, "mask_path": str(mask_path), "probability_path": str(probability_path), "components_path": str(record_path), "component_count": len(candidate_records)}
 
 
-def execute(*args, **kwargs) -> dict:
-    return predict_volume(*args, **kwargs)
+def execute(config: InferCommandConfig) -> dict:
+    return predict_volume(
+        volume_path=config.volume_path,
+        output_dir=config.output_dir,
+        detector_config=config.detector,
+        student_config=config.student,
+        detector_checkpoint=config.detector_checkpoint,
+        student_checkpoint=config.student_checkpoint,
+        preprocessing=config.preprocessing,
+        device=torch.device(config.device),
+        patch_batch_size=config.patch_batch_size,
+        subject_id=config.subject_id,
+    )
