@@ -151,7 +151,11 @@ def _build_loaders(
         validation_subjects, patcher, validation_parameters
     )
 
-    train_dataset = dataset_class(train_patches, perform_augmentation=True)
+    train_dataset = dataset_class(
+        train_patches,
+        perform_augmentation=True,
+        augmentation=command_config.augmentation,
+    )
     validation_dataset = dataset_class(
         validation_patches, perform_augmentation=False
     )
@@ -348,7 +352,12 @@ def train_student(
         trainer_config,
         command_config,
         student,
-        KnowledgeDistillationClassificationTask(teacher),
+        KnowledgeDistillationClassificationTask(
+            teacher,
+            alpha=student_config.alpha,
+            beta=student_config.beta,
+            temperature=student_config.temperature,
+        ),
         utils.patch_subject_target_centered,
         patcher_parameters,
         ClassificationPatchDataset,

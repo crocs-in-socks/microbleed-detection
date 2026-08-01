@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.ndimage import gaussian_filter
 
-from .. import constants
+from microbleednet.config import AugmentationConfig
 
 
 def translate_array(array: np.ndarray, offset_x: int, offset_y: int) -> np.ndarray:
@@ -20,14 +20,19 @@ def translate_array(array: np.ndarray, offset_x: int, offset_y: int) -> np.ndarr
     ] = array[source_x_start:source_x_stop, source_y_start:source_y_stop, ...]
     return shifted
 
-def translate(*volumes, rng: np.random.Generator | None = None, **kwargs):
+def translate(
+    *volumes,
+    augmentation: AugmentationConfig,
+    rng: np.random.Generator | None = None,
+    **kwargs,
+):
     """
     Translation: x-offset: [-15, 15], y-offset: [-15, 15] voxels
     Applied to ALL provided volumes equally.
     (kwargs swallows 'intensity_indices' passed by the main loop)
     """
     rng = rng or np.random.default_rng(0)
-    low, high = constants.transforms.augmentation.translation_offset_range
+    low, high = augmentation.translation_offset_range
     offset_x = int(rng.integers(low, high + 1))
     offset_y = int(rng.integers(low, high + 1))
 
@@ -43,6 +48,7 @@ def translate(*volumes, rng: np.random.Generator | None = None, **kwargs):
 
 def add_noise(
     *volumes,
+    augmentation: AugmentationConfig,
     intensity_indices=(0,),
     rng: np.random.Generator | None = None,
     **kwargs,
@@ -52,7 +58,7 @@ def add_noise(
     Applied ONLY to the volumes specified by intensity_indices.
     """
     rng = rng or np.random.default_rng(0)
-    variance = rng.uniform(*constants.transforms.augmentation.noise_variance_range)
+    variance = rng.uniform(*augmentation.noise_variance_range)
     
     result = list(volumes)
     
@@ -63,6 +69,7 @@ def add_noise(
 
 def blur(
     *volumes,
+    augmentation: AugmentationConfig,
     intensity_indices=(0,),
     rng: np.random.Generator | None = None,
     **kwargs,
@@ -72,7 +79,7 @@ def blur(
     Applied ONLY to the volumes specified by intensity_indices.
     """
     rng = rng or np.random.default_rng(0)
-    sigma = rng.uniform(*constants.transforms.augmentation.blur_sigma_range)
+    sigma = rng.uniform(*augmentation.blur_sigma_range)
     
     result = list(volumes)
     
@@ -83,23 +90,27 @@ def blur(
 
 def augment(
     *volumes,
+    augmentation: AugmentationConfig | None = None,
     intensity_indices=(0,),
     mask_indices=(),
     rng: np.random.Generator | None = None,
 ):
     """
     Applies a random combination of transformations to an arbitrary number of volumes.
-    
+
     Args:
         *volumes: Any number of numpy arrays (e.g., image, label, weights)
+        augmentation: Paper-parameterized ranges (translation/noise/blur). Defaults
+            to the paper values via AugmentationConfig().
         intensity_indices: Tuple of integers indicating which volumes get blur/noise. Defaults to (0,), meaning only the first volume is altered.
     """
+    augmentation = augmentation or AugmentationConfig()
     available_transformations = {
-        'translate': translate, 
-        'noise': add_noise, 
+        'translate': translate,
+        'noise': add_noise,
         'blur': blur
     }
-    
+
     rng = rng or np.random.default_rng(0)
     transformation_names = list(available_transformations)
     count = int(rng.integers(1, len(transformation_names) + 1))
@@ -107,12 +118,13 @@ def augment(
         available_transformations[name]
         for name in rng.choice(transformation_names, size=count, replace=False)
     ]
-    
+
     transformed_volumes = volumes
 
     for func in transformations:
         transformed_volumes = func(
             *transformed_volumes,
+            augmentation=augmentation,
             intensity_indices=intensity_indices,
             mask_indices=mask_indices,
             rng=rng,

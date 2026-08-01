@@ -55,7 +55,7 @@ def test_distillation_loss_is_weighted_and_identical_logits_are_zero() -> None:
     teacher = torch.tensor([[2.0, 0.0], [0.0, 2.0]])
     student = teacher.clone().requires_grad_()
     target = torch.tensor([0, 1], dtype=torch.long)
-    criterion = DiscriminatorStudentLoss()
+    criterion = DiscriminatorStudentLoss(alpha=0.4, beta=0.6, temperature=4)
     assert criterion.knowledge_distillation_loss(teacher, student).abs() < 1e-6
     loss = criterion(teacher, student, target)
     expected = criterion.alpha * criterion.cross_entropy_loss(student, target)

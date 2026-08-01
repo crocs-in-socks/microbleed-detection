@@ -53,9 +53,11 @@ class SegmentationClassificationTask(BaseTask):
         return self.training_step(model, device, batch)
 
 class KnowledgeDistillationClassificationTask(BaseTask):
-    def __init__(self, teacher_model):
+    def __init__(self, teacher_model, alpha: float, beta: float, temperature: float):
         self.teacher_model = teacher_model
-        self.criterion = losses.DiscriminatorStudentLoss()
+        self.criterion = losses.DiscriminatorStudentLoss(
+            alpha=alpha, beta=beta, temperature=temperature
+        )
 
         self.teacher_model.eval()
     

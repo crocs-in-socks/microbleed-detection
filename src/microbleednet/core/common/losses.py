@@ -84,9 +84,9 @@ class DiscriminatorStudentLoss(nn.Module):
     """
     def __init__(
         self,
-        alpha: float = constants.common.losses.discriminator.student.default.alpha,
-        beta: float = constants.common.losses.discriminator.student.default.beta,
-        temperature: float = constants.common.losses.discriminator.student.default.temperature
+        alpha: float,
+        beta: float,
+        temperature: float,
     ):
         super().__init__()
         self.alpha = alpha

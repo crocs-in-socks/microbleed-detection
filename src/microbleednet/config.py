@@ -371,6 +371,10 @@ class TrainCommandConfig(FrozenConfig):
     trainer: TrainerConfig = Field(
         description="Optimizer/epoch/early-stopping hyperparameters shared by stages.",
     )
+    augmentation: AugmentationConfig = Field(
+        default_factory=AugmentationConfig,
+        description="Augmentation ranges applied to training patches.",
+    )
     datasplit: DataSplitConfig = Field(
         default_factory=lambda: DataSplitConfig(test_size=0.2),
         description="Train/validation split settings.",

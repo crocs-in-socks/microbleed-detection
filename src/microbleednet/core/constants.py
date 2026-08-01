@@ -20,11 +20,6 @@ class transforms:
         bright = True
         dark = False
 
-    class augmentation:
-        translation_offset_range = (-15, 15)
-        noise_variance_range = (0.01, 0.04)
-        blur_sigma_range = (0.1, 0.2)
-
 
 class engines:
     class trainers:
@@ -54,10 +49,3 @@ class common:
         class dice:
             class default:
                 smooth = 1.0
-
-        class discriminator:
-            class student:
-                class default:
-                    alpha = 0.4
-                    beta = 0.6
-                    temperature = 4
