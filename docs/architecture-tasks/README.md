@@ -39,22 +39,25 @@ Ask for a slice by number. When implementing one, I will:
 Lower numbers are lower risk and have fewer dependencies. This is a recommended
 order, not a hard requirement; each slice states its own dependencies.
 
-| #  | Slice                                             | Risk   | Depends on |
-| -- | ------------------------------------------------- | ------ | ---------- |
-| 01 | Rename `predict` → `infer`                        | low    | —          |
-| 10 | Connect typed config models to CLI + pipelines    | high   | —          |
-| 02 | Document config keys in CLI help                  | low    | 10         |
-| 03 | Logging: stdlib in core/pipelines, Rich in cli    | medium | —          |
-| 04 | Error-handling boundary                           | medium | 03         |
-| 05 | Remove constants drift (aug + distillation)       | medium | 10         |
-| 06 | Dissolve remaining constants files into models    | medium | 05         |
-| 07 | Isolate optional / heavy dependencies             | low    | —          |
-| 08 | Replace loose dicts at layer boundaries           | high   | 10         |
-| 09 | Provenance as a first-class output                | medium | —          |
+| #  | Slice                                             | Risk   | Depends on | Status |
+| -- | ------------------------------------------------- | ------ | ---------- | ------ |
+| 01 | Rename `predict` → `infer`                        | low    | —          | done   |
+| 10 | Connect typed config models to CLI + pipelines    | high   | —          | done (preprocess/evaluate/infer; train carved to 11) |
+| 02 | Document config keys in CLI help                  | low    | 10         | partial (field descriptions added) |
+| 03 | Logging: stdlib in core/pipelines, Rich in cli    | medium | —          | done   |
+| 04 | Error-handling boundary                           | medium | 03         | todo   |
+| 05 | Remove constants drift (aug + distillation)       | medium | 10         | todo   |
+| 06 | Dissolve remaining constants files into models    | medium | 05         | todo   |
+| 07 | Isolate optional / heavy dependencies             | low    | —          | done   |
+| 08 | Replace loose dicts at layer boundaries           | high   | 10         | todo   |
+| 09 | Provenance as a first-class output                | medium | —          | todo   |
+| 11 | Typed config for the `train` command              | high   | 10         | todo   |
 
 Slices 01, 03, 07 are the safest starting points. **Slice 10 is the
 foundational refactor**: it connects the orphaned `config.py` models to the
 running code and unblocks the help-rendering half of 02, plus 05 and 08. It is
 high risk, so it is split one command per invocation (see the slice file). Do
 slice 10 before the slices that depend on it, but after the low-risk 01/03/07 if
-you want a stable surface first.
+you want a stable surface first. **Slice 11** finishes the one command slice 10
+left untyped (`train`), which is a larger typed-records refactor of an untested
+loop, so it is its own slice.
