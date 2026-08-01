@@ -117,11 +117,11 @@ def infer(
     model = model.to(device)
     model.eval()
 
-    use_amp = (device.type == "cuda")
-    amp_dtype = torch.float16 if use_amp else torch.bfloat16
-
     with torch.no_grad():
-        with autocast(device_type=device.type, dtype=amp_dtype):
+        if device.type == "cuda":
+            with autocast(device_type=device.type, dtype=torch.float16):
+                logits = model(volume)
+        else:
             logits = model(volume)
     
     return logits
