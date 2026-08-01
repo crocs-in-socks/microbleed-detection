@@ -15,6 +15,7 @@ from ..config import (
 from ..pipelines import evaluate, infer, preprocess, train
 from . import index_data
 from .config import load_config, path_value, require_keys
+from .errors import domain_errors
 
 _ConfigModel = TypeVar("_ConfigModel", bound=BaseModel)
 
@@ -129,7 +130,8 @@ def preprocess_command(
     if dry_run:
         _finish(f"Preprocess configuration valid for {dataset_dir} (dry run)")
         return
-    preprocess.execute(dataset_dir, settings.preprocessing)
+    with domain_errors():
+        preprocess.execute(dataset_dir, settings.preprocessing)
     _finish(f"Preprocessed artifacts written under {dataset_dir}")
 
 
@@ -146,7 +148,8 @@ def train_command(
     if dry_run:
         _finish(f"Training configuration valid; outputs would use {experiment_dir} (dry run)")
         return
-    train.execute(dataset_dir, experiment_dir, values["datasplit_parameters"], values["detector_parameters"], values["discriminator_teacher_parameters"], values["discriminator_student_parameters"])
+    with domain_errors():
+        train.execute(dataset_dir, experiment_dir, values["datasplit_parameters"], values["detector_parameters"], values["discriminator_teacher_parameters"], values["discriminator_student_parameters"])
     _finish(f"Training artifacts written under {experiment_dir}")
 
 
@@ -170,7 +173,8 @@ def infer_command(
     if dry_run:
         _finish(f"Inference configuration valid for {settings.volume_path} (dry run)")
         return
-    result = infer.execute(settings)
+    with domain_errors():
+        result = infer.execute(settings)
     _finish(f"Wrote prediction artifacts under {result['mask_path']}")
 
 
@@ -191,7 +195,10 @@ def evaluate_command(
     if dry_run:
         _finish(f"Evaluation configuration valid for {len(settings.subjects)} subjects (dry run)")
         return
-    result = evaluate.execute(settings.subjects, settings.output_dir, settings.metadata)
+    with domain_errors():
+        result = evaluate.execute(
+            settings.subjects, settings.output_dir, settings.metadata
+        )
     _finish(f"Evaluated {len(result['subjects'])} subjects; report written under {settings.output_dir}")
 
 

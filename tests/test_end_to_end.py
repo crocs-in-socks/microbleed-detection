@@ -68,6 +68,37 @@ def test_synthetic_evaluate_workflow_completes(tmp_path: Path) -> None:
     assert report["aggregate"]["true_positives"] == 1
 
 
+def test_run_stage_writes_failed_manifest_and_reraises(tmp_path: Path) -> None:
+    import pytest
+
+    from microbleednet.pipelines import train
+
+    experiment_dir = tmp_path / "experiment"
+    parameters = train._stage_parameters({}, experiment_dir, "detector")
+
+    def _failing_patcher(subject, **_kwargs):
+        raise ValueError("synthetic patcher failure")
+
+    with pytest.raises(ValueError, match="synthetic patcher failure"):
+        train._run_stage(
+            "detector",
+            [{"subject_id": "s1"}],
+            [{"subject_id": "s2"}],
+            parameters,
+            model=None,
+            task=None,
+            patcher=_failing_patcher,
+            dataset_class=None,
+            experiment_dir=experiment_dir,
+        )
+
+    manifest_path = experiment_dir / "manifests" / "detector.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["status"] == "failed"
+    assert manifest["error"]
+    assert "checkpoint_dir" not in manifest
+
+
 def test_write_provenance_captures_config_and_seed(tmp_path: Path) -> None:
     import torch
 
