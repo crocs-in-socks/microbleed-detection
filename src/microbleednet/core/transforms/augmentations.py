@@ -1,62 +1,78 @@
-import random
 import numpy as np
-from skimage.util import random_noise
 from scipy.ndimage import gaussian_filter
 
 from .. import constants
 
 
-def translate_array(array, offsetx: int, offsety: int):
-    """Shifts array by integer offsets and pads with zeros."""
-    shifted_array = np.roll(array, shift=offsetx, axis=0)
-    shifted_array = np.roll(shifted_array, shift=offsety, axis=1) 
+def translate_array(array: np.ndarray, offset_x: int, offset_y: int) -> np.ndarray:
+    """Shift the first two axes without wrapping values across boundaries."""
+    shifted = np.zeros_like(array)
+    source_x_start = max(0, -offset_x)
+    source_x_stop = min(array.shape[0], array.shape[0] - offset_x)
+    source_y_start = max(0, -offset_y)
+    source_y_stop = min(array.shape[1], array.shape[1] - offset_y)
+    target_x_start = max(0, offset_x)
+    target_y_start = max(0, offset_y)
+    shifted[
+        target_x_start:target_x_start + source_x_stop - source_x_start,
+        target_y_start:target_y_start + source_y_stop - source_y_start,
+        ...,
+    ] = array[source_x_start:source_x_stop, source_y_start:source_y_stop, ...]
+    return shifted
 
-    # Zero out the regions that rolled around
-    if offsety > 0:
-        shifted_array[:offsety, :, :] = 0  
-    elif offsety < 0:
-        shifted_array[offsety:, :, :] = 0  
-
-    if offsetx > 0:
-        shifted_array[:, :offsetx, :] = 0  
-    elif offsetx < 0:
-        shifted_array[:, offsetx:, :] = 0  
-
-    return shifted_array
-
-def translate(*volumes, **kwargs):
+def translate(*volumes, rng: np.random.Generator | None = None, **kwargs):
     """
     Translation: x-offset: [-15, 15], y-offset: [-15, 15] voxels
     Applied to ALL provided volumes equally.
     (kwargs swallows 'intensity_indices' passed by the main loop)
     """
-    offsetx = random.randint(*constants.transforms.augmentation.translation_offset_range)
-    offsety = random.randint(*constants.transforms.augmentation.translation_offset_range)
+    rng = rng or np.random.default_rng(0)
+    low, high = constants.transforms.augmentation.translation_offset_range
+    offset_x = int(rng.integers(low, high + 1))
+    offset_y = int(rng.integers(low, high + 1))
 
-    translated_volumes = tuple(translate_array(vol, offsetx, offsety) for vol in volumes)
+    translated_volumes = tuple(translate_array(vol, offset_x, offset_y) for vol in volumes)
+    translated_volumes = tuple(
+        (translated > 0).astype(volume.dtype, copy=False)
+        if index in kwargs.get("mask_indices", ())
+        else translated
+        for index, (translated, volume) in enumerate(zip(translated_volumes, volumes))
+    )
     
     return translated_volumes
 
-def add_noise(*volumes, intensity_indices=(0,)):
+def add_noise(
+    *volumes,
+    intensity_indices=(0,),
+    rng: np.random.Generator | None = None,
+    **kwargs,
+):
     """
     Random noise injection: Distribution - Gaussian, mu = 0, sigma^2 = [0.01, 0.04]
     Applied ONLY to the volumes specified by intensity_indices.
     """
-    variance = random.uniform(*constants.transforms.augmentation.noise_variance_range)
+    rng = rng or np.random.default_rng(0)
+    variance = rng.uniform(*constants.transforms.augmentation.noise_variance_range)
     
     result = list(volumes)
     
     for idx in intensity_indices:
-        result[idx] = random_noise(result[idx], mode='gaussian', mean=0, var=variance)
+        result[idx] = result[idx] + rng.normal(0, np.sqrt(variance), result[idx].shape)
         
     return tuple(result)
 
-def blur(*volumes, intensity_indices=(0,)):
+def blur(
+    *volumes,
+    intensity_indices=(0,),
+    rng: np.random.Generator | None = None,
+    **kwargs,
+):
     """
     Gaussian filtering: sigma = [0.1, 0.2] voxels
     Applied ONLY to the volumes specified by intensity_indices.
     """
-    sigma = random.uniform(*constants.transforms.augmentation.blur_sigma_range)
+    rng = rng or np.random.default_rng(0)
+    sigma = rng.uniform(*constants.transforms.augmentation.blur_sigma_range)
     
     result = list(volumes)
     
@@ -65,7 +81,12 @@ def blur(*volumes, intensity_indices=(0,)):
         
     return tuple(result)
 
-def augment(*volumes, intensity_indices=(0,)):
+def augment(
+    *volumes,
+    intensity_indices=(0,),
+    mask_indices=(),
+    rng: np.random.Generator | None = None,
+):
     """
     Applies a random combination of transformations to an arbitrary number of volumes.
     
@@ -79,12 +100,22 @@ def augment(*volumes, intensity_indices=(0,)):
         'blur': blur
     }
     
-    num_transformations_to_apply = random.randint(1, len(available_transformations))
-    transformations = random.sample(list(available_transformations.values()), num_transformations_to_apply)
+    rng = rng or np.random.default_rng(0)
+    transformation_names = list(available_transformations)
+    count = int(rng.integers(1, len(transformation_names) + 1))
+    transformations = [
+        available_transformations[name]
+        for name in rng.choice(transformation_names, size=count, replace=False)
+    ]
     
     transformed_volumes = volumes
 
     for func in transformations:
-        transformed_volumes = func(*transformed_volumes, intensity_indices=intensity_indices)
+        transformed_volumes = func(
+            *transformed_volumes,
+            intensity_indices=intensity_indices,
+            mask_indices=mask_indices,
+            rng=rng,
+        )
 
     return transformed_volumes
