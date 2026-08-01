@@ -1,10 +1,13 @@
 from pathlib import Path
+import hashlib
+import json
+import os
+import tempfile
 
 import numpy as np
 
 from .. import constants
 
-from microbleednet.core.transforms import basic
 from microbleednet.core.transforms import patch
 
 def nonoverlapping_patcher(
@@ -15,16 +18,12 @@ def nonoverlapping_patcher(
     volume_patches = patch.get_nonoverlapping_patches(volume, patch_size)
     mask_patches = patch.get_nonoverlapping_patches(mask, patch_size)
 
-    voxel_weights = basic.calculate_voxel_weights(mask)
-    voxel_weights_patches = patch.get_nonoverlapping_patches(voxel_weights, patch_size)
-
     return [
         {
             "volume": volume_patch,
             "mask": mask_patch,
-            "voxel_weights": voxel_weights_patch
         }
-        for volume_patch, mask_patch, voxel_weights_patch in zip(volume_patches, mask_patches, voxel_weights_patches)
+        for volume_patch, mask_patch in zip(volume_patches, mask_patches)
     ]
 
 def target_centered_patcher(
@@ -33,15 +32,17 @@ def target_centered_patcher(
         target: np.ndarray,
         patch_size: int
 ) -> list:
-    volume_patches = patch.get_target_centered_patches(volume, target, patch_size)
-    mask_patches = patch.get_target_centered_patches(mask, target, patch_size)
+    volume_records = patch.get_target_centered_patch_records(volume, target, patch_size)
+    mask_records = patch.get_target_centered_patch_records(mask, target, patch_size)
 
     return [
         {
-            "volume": volume_patch,
-            "mask": mask_patch
+            "volume": volume_record[0],
+            "mask": mask_record[0],
+            "patch_bounds": volume_record[1],
+            "candidate_id": volume_record[2],
         }
-        for volume_patch, mask_patch in zip(volume_patches, mask_patches)
+        for volume_record, mask_record in zip(volume_records, mask_records)
     ]
 
 def materialize_patches(
@@ -53,20 +54,39 @@ def materialize_patches(
     patch_dir.mkdir(parents=True, exist_ok=True)
 
     patch_metadata = []
+    manifest = []
 
     for idx, patch_data in enumerate(patches):
         patch_path = patch_dir / f"patch_{volume_identifier}_{idx:06d}.npz"
-        np.savez_compressed(patch_path, **patch_data)
+        arrays = {key: value for key, value in patch_data.items() if isinstance(value, np.ndarray)}
+        with tempfile.NamedTemporaryFile(dir=patch_dir, suffix=".npz", delete=False) as temporary_file:
+            temporary_path = Path(temporary_file.name)
+        try:
+            np.savez_compressed(temporary_path, **arrays)
+            os.replace(temporary_path, patch_path)
+        finally:
+            temporary_path.unlink(missing_ok=True)
 
-        has_microbleed = np.sum(patch_data['mask']) > 0
+        checksum = hashlib.sha256(patch_path.read_bytes()).hexdigest()
+        has_microbleed = bool(np.any(patch_data["mask"] > 0))
+        record = {
+            "patch_path": str(patch_path.resolve()),
+            "source_subject": volume_identifier,
+            "patch_bounds": patch_data.get("patch_bounds"),
+            "candidate_id": patch_data.get("candidate_id", idx),
+            "label": int(has_microbleed),
+            "has_microbleed": has_microbleed,
+            "augmentation_version": 0,
+            "augmentation_factor": int(augmentation_factor),
+            "checksum": checksum,
+        }
+        patch_metadata.append(record)
+        manifest.append(record)
 
-        patch_metadata.extend(
-            {
-                "patch_path": str(patch_path.resolve()),
-                "has_microbleed": has_microbleed,
-                "is_augmented": version != 0
-            }
-            for version in range(augmentation_factor)
-        )
+    manifest_path = patch_dir / f"manifest_{volume_identifier}.json"
+    with tempfile.NamedTemporaryFile("w", dir=patch_dir, suffix=".json", delete=False) as temporary_file:
+        json.dump(manifest, temporary_file, indent=2)
+        temporary_manifest = Path(temporary_file.name)
+    os.replace(temporary_manifest, manifest_path)
 
     return patch_metadata

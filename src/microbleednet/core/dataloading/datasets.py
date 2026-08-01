@@ -1,5 +1,6 @@
-import torch
 import numpy as np
+import hashlib
+import torch
 from torch.utils.data import Dataset
 
 from microbleednet.core.transforms.augmentations import augment
@@ -21,14 +22,18 @@ class BasePatchDataset(Dataset):
 
         patch = self.patches[idx]
         patch_path = patch["patch_path"]
-        has_microbleed = patch["has_microbleed"]
-        is_augmented = patch["is_augmented"]
-        
         with np.load(patch_path) as patch_data:
             patch_dict = {key: patch_data[key] for key in patch_data.files}
 
-        patch_dict["has_microbleed"] = has_microbleed
-        patch_dict["is_augmented"] = is_augmented
+        expected_checksum = patch.get("checksum")
+        if expected_checksum:
+            with open(patch_path, "rb") as patch_file:
+                actual_checksum = hashlib.sha256(patch_file.read()).hexdigest()
+            if actual_checksum != expected_checksum:
+                raise ValueError(f"corrupt patch file: {patch_path}")
+
+        patch_dict["has_microbleed"] = patch.get("has_microbleed", patch.get("label", 0))
+        patch_dict["is_augmented"] = patch.get("augmentation_version", 0) != 0
 
         return patch_dict
 
@@ -42,20 +47,14 @@ class SegmentationPatchDataset(BasePatchDataset):
 
         x = patch["volume"]
         y = patch["mask"]
-        weights = patch["voxel_weights"]
-        is_augmented = patch["is_augmented"]
-
-        if self.perform_augmentation and is_augmented:
-            x, y, weights = augment(x, y, weights)
+        if self.perform_augmentation:
+            x, y = augment(x, y, mask_indices=(1,), rng=np.random.default_rng(idx))
 
         x = np.expand_dims(x, axis=0) # Shape: (1, H, W, D)
-        y_one_hot = np.stack((1 - y, y), axis=0) # Shape: (2, H, W, D)
-        weights = np.expand_dims(weights, axis=0) # Shape: (1, H, W, D)
 
         return {
             "x": torch.from_numpy(x).float(),
-            "y": torch.from_numpy(y_one_hot).float(),
-            "weights": torch.from_numpy(weights).float()
+            "y": torch.from_numpy(y.astype(np.int64, copy=False)),
         }
 
 class SegmentationClassificationPatchDataset(BasePatchDataset):
@@ -64,24 +63,15 @@ class SegmentationClassificationPatchDataset(BasePatchDataset):
 
         volume = patch["volume"]
         mask = patch["mask"]
-        weights = patch["voxel_weights"]
         label = patch["has_microbleed"]
-        is_augmented = patch["is_augmented"]
-
-        if self.perform_augmentation and is_augmented:
-            volume, mask, weights = augment(volume, mask, weights)
+        if self.perform_augmentation:
+            volume, mask = augment(volume, mask, mask_indices=(1,), rng=np.random.default_rng(idx))
 
         volume = np.expand_dims(volume, axis=0) # Shape: (1, H, W, D)
-        mask_one_hot = np.stack((1 - mask, mask), axis=0) # Shape: (2, H, W, D)
-        weights = np.expand_dims(weights, axis=0) # Shape: (1, H, W, D)
-
-        label_one_hot = np.array([1 - int(label), int(label)])
-
         return {
             "volume": torch.from_numpy(volume).float(),
-            "mask": torch.from_numpy(mask_one_hot).float(),
-            "weights": torch.from_numpy(weights).float(),
-            "label": torch.from_numpy(label_one_hot).float()
+            "mask": torch.from_numpy(mask.astype(np.int64, copy=False)),
+            "label": torch.tensor(int(label), dtype=torch.int64),
         }
 
 class ClassificationPatchDataset(BasePatchDataset):
@@ -90,15 +80,11 @@ class ClassificationPatchDataset(BasePatchDataset):
 
         x = patch["volume"]
         y = patch["has_microbleed"]
-        is_augmented = patch["is_augmented"]
-
-        if self.perform_augmentation and is_augmented:
+        if self.perform_augmentation:
             (x,) = augment(x)  # Unpack the tuple returned by augment
 
         x = np.expand_dims(x, axis=0) # Shape: (1, H, W, D)
-        y_one_hot = np.array([1 - int(y), int(y)]) 
-
         return {
             "x": torch.from_numpy(x).float(),
-            "y": torch.from_numpy(y_one_hot).float()
+            "y": torch.tensor(int(y), dtype=torch.int64)
         }
