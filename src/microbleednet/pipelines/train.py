@@ -1,4 +1,3 @@
-import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
@@ -7,7 +6,7 @@ import torch
 from sklearn.model_selection import train_test_split
 from torch.utils.data import BatchSampler, DataLoader, SequentialSampler
 
-from .. import provenance, storage
+from .. import manifests, provenance
 from ..config import (
     DetectorConfig,
     ModelConfig,
@@ -33,6 +32,7 @@ from ..core.dataloading.datasets import (
     SegmentationPatchDataset,
 )
 from ..core.dataloading.samplers import EqualBatchSampler
+from ..manifests import PreprocessedDatasetManifest, PreprocessedSubject
 from . import constants, utils
 
 logger = logging.getLogger(__name__)
@@ -96,19 +96,38 @@ def _model_kwargs(model_config: ModelConfig) -> dict:
     }
 
 
-def _validate_subjects(subjects: list[dict]) -> None:
+def _validate_subjects(subjects: list[PreprocessedSubject]) -> None:
     missing = [
-        subject.get("subject_id", "unknown")
-        for subject in subjects
-        if not subject.get("mask_path")
+        subject.subject_id for subject in subjects if not subject.mask_path
     ]
     if missing:
         raise ValueError(f"training requires masks for subjects: {missing}")
 
 
-def _write_stage_manifest(path: Path, stage: str, status: str, **details) -> None:
-    payload = {"stage": stage, "status": status, **details}
-    storage.write_json_atomic(path, payload)
+def _write_stage_manifest(
+    path: Path,
+    stage: str,
+    status: manifests.ManifestStatus,
+    created_at: str,
+    *,
+    error: str | None = None,
+    checkpoint_dir: str | None = None,
+    train_patch_dir: str | None = None,
+    validation_patch_dir: str | None = None,
+    records: list[dict[str, float]] | None = None,
+) -> None:
+    manifest = manifests.TrainingStageManifest(
+        status=status,
+        created_at=created_at,
+        updated_at=manifests.timestamp(),
+        error=error,
+        stage=stage,
+        checkpoint_dir=checkpoint_dir,
+        train_patch_dir=train_patch_dir,
+        validation_patch_dir=validation_patch_dir,
+        records=records or [],
+    )
+    manifests.write_manifest(path, manifest)
 
 
 def _optimizer_parameters(trainer_config: TrainerConfig) -> dict:
@@ -200,7 +219,13 @@ def _run_stage(
 ):
     from ..core.engines.trainers import Trainer
 
-    _write_stage_manifest(runtime.manifest_path, runtime.stage, "running")
+    created_at = manifests.timestamp()
+    _write_stage_manifest(
+        runtime.manifest_path,
+        runtime.stage,
+        manifests.ManifestStatus.RUNNING,
+        created_at,
+    )
     try:
         train_loader, validation_loader = _build_loaders(
             train_subjects,
@@ -229,7 +254,8 @@ def _run_stage(
         _write_stage_manifest(
             runtime.manifest_path,
             runtime.stage,
-            "complete",
+            manifests.ManifestStatus.COMPLETE,
+            created_at,
             checkpoint_dir=str(runtime.checkpoint_dir.resolve()),
             train_patch_dir=str(runtime.train_patch_dir.resolve()),
             validation_patch_dir=str(runtime.validation_patch_dir.resolve()),
@@ -237,7 +263,11 @@ def _run_stage(
         )
     except Exception as error:
         _write_stage_manifest(
-            runtime.manifest_path, runtime.stage, "failed", error=str(error)
+            runtime.manifest_path,
+            runtime.stage,
+            manifests.ManifestStatus.FAILED,
+            created_at,
+            error=str(error),
         )
         raise
 
@@ -372,10 +402,11 @@ def train_student(
 
 
 def execute(config: TrainCommandConfig) -> None:
-    preprocessed_manifest_path = config.dataset_dir / constants.manifests.preprocessed
-    with open(preprocessed_manifest_path, "r") as preprocessed_manifest_file:
-        preprocessed_manifest_content = json.load(preprocessed_manifest_file)
-        preprocessed_subjects = preprocessed_manifest_content.get("subjects", [])
+    preprocessed_manifest = manifests.read_manifest(
+        config.dataset_dir / constants.manifests.preprocessed,
+        PreprocessedDatasetManifest,
+    )
+    preprocessed_subjects = preprocessed_manifest.subjects
 
     _validate_subjects(preprocessed_subjects)
     train_subjects, validation_subjects = train_test_split(
