@@ -36,6 +36,12 @@ def write_json_atomic(path: Path, data: dict[str, Any] | list[Any]) -> None:
     os.replace(temporary_path, path)
 
 
+def read_json(path: Path) -> Any:
+    """Read and parse a JSON document from ``path``."""
+    with open(path, encoding="utf-8") as json_file:
+        return json.load(json_file)
+
+
 def write_text_atomic(path: Path, text: str) -> None:
     """Write ``text`` to ``path``, replacing it atomically.
 
