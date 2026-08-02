@@ -4,7 +4,6 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from skimage.measure import label, regionprops
 
 from ..core import utils as core_utils
 from ..core.common.models import CandidateDetector
@@ -57,11 +56,9 @@ def patch_subject_target_centered(subject: PreprocessedSubject, patch_dir: Path,
     logits = core_processor.infer(model, device, volume)
     output = core_processor.positive_class_probability(logits)[0]  # drop batch axis
     candidate_mask = (output > threshold).astype(np.uint8)
-    candidate_labels = label(candidate_mask, connectivity=3)
-    candidate_probabilities = {
-        region.label: float(output[candidate_labels == region.label].mean())
-        for region in regionprops(candidate_labels)
-    }
+    _, _, candidate_probabilities = core_processor.label_candidates(
+        candidate_mask, output
+    )
 
     patches = core_patchers.target_centered_patcher(volume, mask, candidate_mask, patch_size)
     for patch_data in patches:
