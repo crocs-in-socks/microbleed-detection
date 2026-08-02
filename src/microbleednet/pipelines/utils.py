@@ -4,7 +4,6 @@ from pathlib import Path
 
 import numpy as np
 import torch
-import torch.nn.functional as F
 from skimage.measure import label, regionprops
 
 from ..core import utils as core_utils
@@ -56,8 +55,7 @@ def patch_subject_target_centered(subject: PreprocessedSubject, patch_dir: Path,
     mask = _load_array(subject.mask_path)
 
     logits = core_processor.infer(model, device, volume)
-    output = F.softmax(logits, dim=1)
-    output = output.cpu().numpy()[0, 1] # 0 to remove batch, and index 1 for output channel
+    output = core_processor.positive_class_probability(logits)[0]  # drop batch axis
     candidate_mask = (output > threshold).astype(np.uint8)
     candidate_labels = label(candidate_mask, connectivity=3)
     candidate_probabilities = {
