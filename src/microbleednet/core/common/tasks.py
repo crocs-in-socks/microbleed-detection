@@ -1,56 +1,79 @@
+from collections.abc import Mapping
+
 import torch
+import torch.nn as nn
 
 from microbleednet.core.common import losses
 from microbleednet.core.transforms import frst
 
+# A collated training batch as produced by the patch datasets: a mapping from
+# a fixed set of tensor names to tensors. Every dataset supplies ``volume`` (the
+# input image patch); segmentation datasets add ``mask`` and classification
+# datasets add ``label``. A task reads only the keys its dataset supplies.
+TrainingBatch = Mapping[str, torch.Tensor]
+
 
 class BaseTask:
-    def training_step(self, batch):
+    def training_step(
+        self, model: nn.Module, device: torch.device, batch: TrainingBatch
+    ) -> torch.Tensor:
         raise NotImplementedError("Subclasses must implement the training_step method.")
 
-    def validation_step(self, batch):
-        raise NotImplementedError("Subclasses must implement the validation_step method.")
+    def validation_step(
+        self, model: nn.Module, device: torch.device, batch: TrainingBatch
+    ) -> torch.Tensor:
+        raise NotImplementedError(
+            "Subclasses must implement the validation_step method."
+        )
+
+
+def _volume_with_frst(volume: torch.Tensor) -> torch.Tensor:
+    """Concatenate the FRST transform onto the volume as a second channel."""
+    return torch.cat((volume, frst.apply(volume)), dim=1)  # Shape: (Batch, 2, H, W, D)
 
 
 class SegmentationTask(BaseTask):
     def __init__(self):
         self.criterion = losses.DetectorLoss()
 
-    def training_step(self, model, device, batch):
-        x = batch["x"].to(device, dtype=torch.float)
-        y = batch["y"].to(device, dtype=torch.long)
+    def training_step(
+        self, model: nn.Module, device: torch.device, batch: TrainingBatch
+    ) -> torch.Tensor:
+        volume = batch["volume"].to(device, dtype=torch.float)
+        mask = batch["mask"].to(device, dtype=torch.long)
 
-        x_frst = frst.apply(x)
-        x = torch.cat((x, x_frst), dim=1) # Shape: (Batch, 2, H, W, D)
-
-        logits = model(x)
-        loss = self.criterion(logits, y)
+        logits = model(_volume_with_frst(volume))
+        loss = self.criterion(logits, mask)
 
         return loss
 
-    def validation_step(self, model, device, batch):
+    def validation_step(
+        self, model: nn.Module, device: torch.device, batch: TrainingBatch
+    ) -> torch.Tensor:
         return self.training_step(model, device, batch)
 
 
 class SegmentationClassificationTask(BaseTask):
     def __init__(self):
         self.criterion = losses.DiscriminatorTeacherLoss()
-    
-    def training_step(self, model, device, batch):
+
+    def training_step(
+        self, model: nn.Module, device: torch.device, batch: TrainingBatch
+    ) -> torch.Tensor:
         volume = batch["volume"].to(device, dtype=torch.float)
         mask = batch["mask"].to(device, dtype=torch.long)
         label = batch["label"].to(device, dtype=torch.long)
 
-        volume_frst = frst.apply(volume)
-        volume = torch.cat((volume, volume_frst), dim=1) # Shape: (Batch, 2, H, W, D)
-
-        segmentation_logits, classification_logits = model(volume)
+        segmentation_logits, classification_logits = model(_volume_with_frst(volume))
         loss = self.criterion(classification_logits, label, segmentation_logits, mask)
 
         return loss
 
-    def validation_step(self, model, device, batch):
+    def validation_step(
+        self, model: nn.Module, device: torch.device, batch: TrainingBatch
+    ) -> torch.Tensor:
         return self.training_step(model, device, batch)
+
 
 class KnowledgeDistillationClassificationTask(BaseTask):
     def __init__(self, teacher_model, alpha: float, beta: float, temperature: float):
@@ -60,22 +83,25 @@ class KnowledgeDistillationClassificationTask(BaseTask):
         )
 
         self.teacher_model.eval()
-    
-    def training_step(self, student_model, device, batch):
-        x = batch["x"].to(device, dtype=torch.float)
-        y = batch["y"].to(device, dtype=torch.long)
 
-        x_frst = frst.apply(x)
-        x = torch.cat((x, x_frst), dim=1)
+    def training_step(
+        self, model: nn.Module, device: torch.device, batch: TrainingBatch
+    ) -> torch.Tensor:
+        volume = batch["volume"].to(device, dtype=torch.float)
+        label = batch["label"].to(device, dtype=torch.long)
+
+        volume = _volume_with_frst(volume)
 
         with torch.no_grad():
-            _, teacher_logits = self.teacher_model(x)
-        
-        student_logits = student_model(x)
+            _, teacher_logits = self.teacher_model(volume)
 
-        loss = self.criterion(teacher_logits, student_logits, y)
+        student_logits = model(volume)
+
+        loss = self.criterion(teacher_logits, student_logits, label)
 
         return loss
 
-    def validation_step(self, student_model, device, batch):
-        return self.training_step(student_model, device, batch)
+    def validation_step(
+        self, model: nn.Module, device: torch.device, batch: TrainingBatch
+    ) -> torch.Tensor:
+        return self.training_step(model, device, batch)

@@ -76,7 +76,6 @@ def materialize_patches(
             "patch_bounds": patch_data.get("patch_bounds"),
             "candidate_id": patch_data.get("candidate_id", idx),
             "candidate_probability": patch_data.get("candidate_probability"),
-            "label": int(has_microbleed),
             "has_microbleed": has_microbleed,
             "augmentation_version": 0,
             "augmentation_factor": int(augmentation_factor),

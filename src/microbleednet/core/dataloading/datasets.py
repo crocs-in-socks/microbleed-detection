@@ -35,7 +35,7 @@ class BasePatchDataset(Dataset):
             if actual_checksum != expected_checksum:
                 raise ValueError(f"corrupt patch file: {patch_path}")
 
-        patch_dict["has_microbleed"] = patch.get("has_microbleed", patch.get("label", 0))
+        patch_dict["has_microbleed"] = patch["has_microbleed"]
         patch_dict["is_augmented"] = patch.get("augmentation_version", 0) != 0
 
         return patch_dict
@@ -48,19 +48,19 @@ class SegmentationPatchDataset(BasePatchDataset):
     def __getitem__(self, idx: int):
         patch = self.load_patch(idx)
 
-        x = patch["volume"]
-        y = patch["mask"]
+        volume = patch["volume"]
+        mask = patch["mask"]
         if self.perform_augmentation:
-            x, y = augment(
-                x, y, augmentation=self.augmentation,
+            volume, mask = augment(
+                volume, mask, augmentation=self.augmentation,
                 mask_indices=(1,), rng=np.random.default_rng(idx),
             )
 
-        x = np.expand_dims(x, axis=0) # Shape: (1, H, W, D)
+        volume = np.expand_dims(volume, axis=0) # Shape: (1, H, W, D)
 
         return {
-            "x": torch.from_numpy(x).float(),
-            "y": torch.from_numpy(y.astype(np.int64, copy=False)),
+            "volume": torch.from_numpy(volume).float(),
+            "mask": torch.from_numpy(mask.astype(np.int64, copy=False)),
         }
 
 class SegmentationClassificationPatchDataset(BasePatchDataset):
@@ -87,13 +87,13 @@ class ClassificationPatchDataset(BasePatchDataset):
     def __getitem__(self, idx):
         patch = self.load_patch(idx)
 
-        x = patch["volume"]
-        y = patch["has_microbleed"]
+        volume = patch["volume"]
+        label = patch["has_microbleed"]
         if self.perform_augmentation:
-            (x,) = augment(x, augmentation=self.augmentation)  # Unpack the tuple
+            (volume,) = augment(volume, augmentation=self.augmentation)  # Unpack
 
-        x = np.expand_dims(x, axis=0) # Shape: (1, H, W, D)
+        volume = np.expand_dims(volume, axis=0) # Shape: (1, H, W, D)
         return {
-            "x": torch.from_numpy(x).float(),
-            "y": torch.tensor(int(y), dtype=torch.int64)
+            "volume": torch.from_numpy(volume).float(),
+            "label": torch.tensor(int(label), dtype=torch.int64),
         }
