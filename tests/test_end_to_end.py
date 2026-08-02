@@ -74,6 +74,69 @@ def test_synthetic_evaluate_workflow_completes(tmp_path: Path) -> None:
     assert result.exit_code == 0, result.output
     report = json.loads((output_dir / "evaluation.json").read_text(encoding="utf-8"))
     assert report["aggregate"]["true_positives"] == 1
+    # Without froc_thresholds the sweep is not produced.
+    assert not (output_dir / "froc.json").exists()
+
+
+def test_evaluate_with_froc_thresholds_writes_sweep(tmp_path: Path) -> None:
+    affine = np.eye(4)
+    reference = np.zeros((8, 8, 8), dtype=np.uint8)
+    reference[2:4, 2:4, 2:4] = 1
+    prediction = reference.copy()
+    # A probability map whose lesion voxels sit between the two swept thresholds,
+    # so the low threshold recovers the lesion and the high one drops it.
+    probability = np.zeros_like(reference, dtype=np.float32)
+    probability[2:4, 2:4, 2:4] = 0.6
+    prediction_path = tmp_path / "prediction.nii.gz"
+    reference_path = tmp_path / "reference.nii.gz"
+    probability_path = tmp_path / "probability.nii.gz"
+    nib.save(nib.Nifti1Image(prediction, affine), prediction_path)
+    nib.save(nib.Nifti1Image(reference, affine), reference_path)
+    nib.save(nib.Nifti1Image(probability, affine), probability_path)
+    config_path = tmp_path / "evaluate.json"
+    output_dir = tmp_path / "report"
+    config_path.write_text(json.dumps({
+        "subjects": [{
+            "subject_id": "synthetic",
+            "prediction_path": str(prediction_path),
+            "reference_path": str(reference_path),
+            "probability_path": str(probability_path),
+        }],
+        "output_dir": str(output_dir),
+        "froc_thresholds": [0.5, 0.9],
+    }), encoding="utf-8")
+
+    result = runner.invoke(app, ["evaluate", "--config", str(config_path)])
+    assert result.exit_code == 0, result.output
+    points = json.loads((output_dir / "froc.json").read_text(encoding="utf-8"))
+    by_threshold = {point["threshold"]: point for point in points}
+    assert by_threshold[0.5]["true_positives"] == 1
+    assert by_threshold[0.9]["true_positives"] == 0
+    assert (output_dir / "froc.csv").exists()
+
+
+def test_evaluate_froc_requires_probability_paths(tmp_path: Path) -> None:
+    affine = np.eye(4)
+    mask = np.zeros((8, 8, 8), dtype=np.uint8)
+    mask[2:4, 2:4, 2:4] = 1
+    prediction_path = tmp_path / "prediction.nii.gz"
+    reference_path = tmp_path / "reference.nii.gz"
+    nib.save(nib.Nifti1Image(mask, affine), prediction_path)
+    nib.save(nib.Nifti1Image(mask, affine), reference_path)
+    config_path = tmp_path / "evaluate.json"
+    config_path.write_text(json.dumps({
+        "subjects": [{
+            "subject_id": "synthetic",
+            "prediction_path": str(prediction_path),
+            "reference_path": str(reference_path),
+        }],
+        "output_dir": str(tmp_path / "report"),
+        "froc_thresholds": [0.5],
+    }), encoding="utf-8")
+
+    result = runner.invoke(app, ["evaluate", "--config", str(config_path)])
+    assert result.exit_code != 0
+    assert "probability_path" in result.output
 
 
 def _train_config_dict(dataset_dir: Path, experiment_dir: Path) -> dict:

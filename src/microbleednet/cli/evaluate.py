@@ -22,7 +22,10 @@ def evaluate_command(
 ) -> None:
     settings = parse_config(config, EvaluateCommandConfig)
     for subject in settings.subjects:
-        for path in (subject.prediction_path, subject.reference_path):
+        paths = [subject.prediction_path, subject.reference_path]
+        if subject.probability_path is not None:
+            paths.append(subject.probability_path)
+        for path in paths:
             if not path.is_file():
                 raise typer.BadParameter(f"configured path does not exist: {path}")
     if dry_run:
@@ -30,6 +33,9 @@ def evaluate_command(
         return
     with domain_errors():
         result = evaluate.execute(
-            settings.subjects, settings.output_dir, settings.metadata
+            settings.subjects,
+            settings.output_dir,
+            settings.metadata,
+            settings.froc_thresholds,
         )
     finish(f"Evaluated {len(result['subjects'])} subjects; report written under {settings.output_dir}")
