@@ -22,6 +22,22 @@ def _extract_fixed_patch(
     result[target] = volume[source]
     return result, bounds
 
+
+def extract_centered_patch(
+    volume: np.ndarray,
+    center: tuple[int, int, int],
+    patch_size: int,
+) -> tuple[np.ndarray, tuple[tuple[int, int], tuple[int, int], tuple[int, int]]]:
+    """Extract a ``patch_size``\\ ^3 patch centered on ``center``.
+
+    Returns the zero-padded patch and its bounds in volume coordinates. This is
+    the public entry point callers outside this module use; the record helpers
+    and inference share it so the centering convention lives in one place.
+    """
+    _validate_patch_size(patch_size)
+    starts = tuple(center_axis - patch_size // 2 for center_axis in center)
+    return _extract_fixed_patch(volume, starts, patch_size)
+
 def get_nonoverlapping_patches(volume: np.ndarray, patch_size: int) -> list:
     _validate_patch_size(patch_size)
     if volume.ndim != 3:
@@ -69,7 +85,6 @@ def get_target_centered_patch_records(
     records = []
     for candidate_id, properties in enumerate(regionprops(labeled_target), start=1):
         center = tuple(int(np.round(value)) for value in properties.centroid)
-        starts = tuple(center_axis - patch_size // 2 for center_axis in center)
-        patch_data, bounds = _extract_fixed_patch(volume, starts, patch_size)
+        patch_data, bounds = extract_centered_patch(volume, center, patch_size)
         records.append((patch_data, bounds, candidate_id))
     return records

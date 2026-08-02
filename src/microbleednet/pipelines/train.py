@@ -46,10 +46,6 @@ logger = logging.getLogger(__name__)
 # volume plus its FRST transform, concatenated inside the task's training step.
 _STAGE_INPUT_CHANNELS = 2
 
-# The teacher and student operate on candidate-centered patches, which the
-# classifier head requires to be 24^3 (see Classifier.expected_features).
-_CANDIDATE_PATCH_SIZE = 24
-
 
 @dataclass(frozen=True)
 class _StageRuntime:
@@ -369,7 +365,7 @@ def train_teacher(
     core_utils.initialize_teacher_from_detector(detector, teacher)
 
     patcher_parameters = {
-        "patch_size": _CANDIDATE_PATCH_SIZE,
+        "patch_size": teacher_config.patch_size,
         "model": detector,
         "device": device,
         "threshold": detector_config.probability_threshold,
@@ -420,7 +416,7 @@ def train_student(
         **_model_kwargs(student_config), dropout_rate=student_config.dropout_rate
     )
     patcher_parameters = {
-        "patch_size": _CANDIDATE_PATCH_SIZE,
+        "patch_size": student_config.patch_size,
         "model": detector,
         "device": device,
         "threshold": detector_config.probability_threshold,
