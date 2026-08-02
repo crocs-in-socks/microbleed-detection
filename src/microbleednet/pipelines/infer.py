@@ -19,7 +19,7 @@ from ..core import utils
 from ..core.common.models import CandidateDetector, CandidateDiscriminatorStudent
 from ..core.engines import processor
 from ..core.transforms import frst
-from ..core.transforms.patch import _extract_fixed_patch
+from ..core.transforms.patch import extract_centered_patch
 from ..records import PredictionSummary
 
 
@@ -101,12 +101,14 @@ def predict_volume(
     detector_probability = F.softmax(detector_logits, dim=1).cpu().numpy()[0, 1]
     candidate_mask = detector_probability >= detector_threshold
     candidate_records, candidate_labels = _candidate_records(candidate_mask, detector_probability, subject_id)
+    candidate_patch_size = student_config.patch_size
     patch_records = []
     patches = []
     for region in regionprops(candidate_labels):
         center = tuple(int(round(value)) for value in region.centroid)
-        starts = tuple(axis - 12 for axis in center)
-        patch, bounds = _extract_fixed_patch(processed.image, starts, 24)
+        patch, bounds = extract_centered_patch(
+            processed.image, center, candidate_patch_size
+        )
         patches.append(patch)
         patch_records.append((int(region.label), bounds))
 

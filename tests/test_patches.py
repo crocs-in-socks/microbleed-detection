@@ -3,6 +3,7 @@ import pytest
 
 from microbleednet.core.dataloading.patchers import target_centered_patcher
 from microbleednet.core.transforms.patch import (
+    extract_centered_patch,
     get_nonoverlapping_patches,
     get_target_centered_patches,
 )
@@ -68,3 +69,23 @@ def test_invalid_patch_size_fails() -> None:
 
     with pytest.raises(ValueError, match="positive"):
         get_nonoverlapping_patches(volume, 0)
+
+
+def test_extract_centered_patch_centers_and_reports_bounds() -> None:
+    # The public entry point centers a size^3 patch on the requested voxel and
+    # reports the bounds it cropped, in volume coordinates.
+    volume = np.zeros((8, 8, 8), dtype=np.float32)
+    volume[4, 5, 6] = 1
+
+    patch, bounds = extract_centered_patch(volume, (4, 5, 6), 4)
+
+    assert patch.shape == (4, 4, 4)
+    assert patch[2, 2, 2] == 1
+    assert bounds == ((2, 6), (3, 7), (4, 8))
+
+
+def test_extract_centered_patch_rejects_nonpositive_size() -> None:
+    volume = np.zeros((4, 4, 4), dtype=np.float32)
+
+    with pytest.raises(ValueError, match="positive"):
+        extract_centered_patch(volume, (2, 2, 2), 0)
