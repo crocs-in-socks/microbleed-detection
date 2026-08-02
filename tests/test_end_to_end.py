@@ -198,6 +198,7 @@ def test_train_emits_provenance_before_training(tmp_path: Path) -> None:
 def test_infer_emits_provenance_before_prediction(tmp_path: Path) -> None:
     from microbleednet.config import InferCommandConfig
     from microbleednet.pipelines import infer
+    from microbleednet.records import PredictionSummary
 
     model_block = {
         "initial_channels": 64,
@@ -226,7 +227,13 @@ def test_infer_emits_provenance_before_prediction(tmp_path: Path) -> None:
     def _fake_predict(**_kwargs):
         # Provenance must already be on disk before any prediction is produced.
         calls["provenance_first"] = (output_dir / "provenance.json").exists()
-        return {"subject_id": "volume"}
+        return PredictionSummary(
+            subject_id="volume",
+            mask_path=output_dir / "volume_prediction.nii.gz",
+            probability_path=output_dir / "volume_probability.nii.gz",
+            components_path=output_dir / "volume_components.json",
+            component_count=0,
+        )
 
     original = infer.predict_volume
     infer.predict_volume = _fake_predict  # type: ignore[assignment]

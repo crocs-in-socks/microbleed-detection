@@ -49,7 +49,7 @@ order, not a hard requirement; each slice states its own dependencies.
 | 05 | Remove constants drift (aug + distillation)       | medium | 10         | done   |
 | 06 | Dissolve remaining constants files into models    | medium | 05         | done   |
 | 07 | Isolate optional / heavy dependencies             | low    | —          | done   |
-| 08 | Replace loose dicts at layer boundaries           | high   | 10         | todo   |
+| 08 | Replace loose dicts at layer boundaries           | high   | 10         | in progress (infer result → PredictionSummary; evaluate report + patcher_parameters remain) |
 | 09 | Provenance as a first-class output                | medium | —          | done (typed record + train emission wiring) |
 | 11 | Typed config for the `train` command              | high   | 10         | done   |
 
