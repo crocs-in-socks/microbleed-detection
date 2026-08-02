@@ -1,24 +1,27 @@
-import json
 from pathlib import Path
-from datetime import datetime
 
 import nibabel as nib
 
-from .. import storage
+from .. import manifests
 from ..config import PreprocessingConfig
 from ..core import utils
-from . import constants
 from ..core.engines import processor
+from ..manifests import (
+    PreprocessedDatasetManifest,
+    PreprocessedSubject,
+    RawDatasetManifest,
+)
+from . import constants
+
 
 def execute(
     dataset_dir: Path,
     preprocessing: PreprocessingConfig,
 ) -> None:
     preprocessor_parameters = preprocessing.model_dump()
-    raw_manifest_path = dataset_dir / constants.manifests.raw
-    with open(raw_manifest_path, "r") as raw_manifest_file:
-        raw_manifest_content = json.load(raw_manifest_file)
-        raw_subjects = raw_manifest_content.get("subjects", [])
+    raw_manifest = manifests.read_manifest(
+        dataset_dir / constants.manifests.raw, RawDatasetManifest
+    )
 
     volumes_dir = dataset_dir / constants.preprocess.volumes_dir
     volumes_dir.mkdir(parents=True, exist_ok=True)
@@ -28,13 +31,13 @@ def execute(
 
     preprocessed_subjects = []
 
-    for subject in raw_subjects:
-        subject_id = subject["subject_id"]
-        raw_volume_path = subject["volume_path"]
-        raw_mask_path = subject.get("mask_path")
+    for subject in raw_manifest.subjects:
+        subject_id = subject.subject_id
+        raw_volume_path = subject.volume_path
+        raw_mask_path = subject.mask_path
 
-        raw_volume = utils.load_volume(raw_volume_path)
-        raw_mask = utils.load_volume(raw_mask_path) if raw_mask_path else None
+        raw_volume = utils.load_volume(Path(raw_volume_path))
+        raw_mask = utils.load_volume(Path(raw_mask_path)) if raw_mask_path else None
 
         output = processor.preprocess(raw_volume, raw_mask, **preprocessor_parameters)
 
@@ -42,6 +45,7 @@ def execute(
         preprocessed_volume_path = volumes_dir / f"{subject_id}{constants.preprocess.volume_suffix}"
         utils.save_volume(preprocessed_volume, preprocessed_volume_path)
 
+        preprocessed_mask_path = None
         if raw_mask is not None:
             if output.mask is None:
                 raise ValueError(f"preprocessing returned no mask for {subject_id}")
@@ -49,24 +53,33 @@ def execute(
             preprocessed_mask_path = masks_dir / f"{subject_id}{constants.preprocess.mask_suffix}"
             utils.save_volume(preprocessed_mask, preprocessed_mask_path)
 
-        preprocessed_subject = {
-            "subject_id": subject_id,
-            "volume_path": str(preprocessed_volume_path.resolve()),
-            "mask_path": str(preprocessed_mask_path.resolve()) if raw_mask is not None else None,
-            "bounding_box": [list(bounds) for bounds in zip(
-                output.transform.crop_start, output.transform.crop_stop
-            )],
-        }
-
-        preprocessed_subjects.append(preprocessed_subject)
-
-        preprocessed_manifest_path = dataset_dir / constants.manifests.preprocessed
-        preprocessed_manifest_data = {
-            "stage": "preprocessed",
-            "created_on": datetime.now().isoformat(),
-            "preprocess_parameters": preprocessor_parameters,
-            "subjects": preprocessed_subjects,
-        }
-        storage.write_json_atomic(
-            preprocessed_manifest_path, preprocessed_manifest_data
+        preprocessed_subjects.append(
+            PreprocessedSubject(
+                subject_id=subject_id,
+                volume_path=str(preprocessed_volume_path.resolve()),
+                mask_path=(
+                    str(preprocessed_mask_path.resolve())
+                    if preprocessed_mask_path is not None
+                    else None
+                ),
+                bounding_box=[
+                    list(bounds)
+                    for bounds in zip(
+                        output.transform.crop_start, output.transform.crop_stop
+                    )
+                ],
+            )
         )
+
+    # Publish the manifest once, after every subject is on disk.
+    now = manifests.timestamp()
+    preprocessed_manifest = PreprocessedDatasetManifest(
+        status=manifests.ManifestStatus.COMPLETE,
+        created_at=now,
+        updated_at=now,
+        preprocess_parameters=preprocessor_parameters,
+        subjects=preprocessed_subjects,
+    )
+    manifests.write_manifest(
+        dataset_dir / constants.manifests.preprocessed, preprocessed_manifest
+    )

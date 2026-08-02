@@ -11,6 +11,7 @@ from ..core import utils as core_utils
 from ..core.common.models import CandidateDetector
 from ..core.dataloading import patchers as core_patchers
 from ..core.engines import processor as core_processor
+from ..manifests import PreprocessedSubject
 
 
 def delete_model(model):
@@ -27,13 +28,18 @@ def collect_patches(subjects: list, subject_patcher: Callable, patcher_parameter
         patches.extend(subject_patcher(subject, **patcher_parameters))
     return patches
 
-def patch_subject_non_overlapping(subject: dict, patch_dir: Path, patch_size: int, augmentation_factor: int):
-    subject_id = subject["subject_id"]
-    volume_path = subject["volume_path"]
-    mask_path = subject["mask_path"]
 
-    volume = core_utils.nifti_to_numpy(core_utils.load_volume(volume_path))
-    mask = core_utils.nifti_to_numpy(core_utils.load_volume(mask_path))
+def _load_array(path: str) -> np.ndarray:
+    """Load a NIfTI volume at ``path`` and return it as a numpy array."""
+    return core_utils.nifti_to_numpy(core_utils.load_volume(Path(path)))
+
+def patch_subject_non_overlapping(subject: PreprocessedSubject, patch_dir: Path, patch_size: int, augmentation_factor: int):
+    subject_id = subject.subject_id
+    if subject.mask_path is None:
+        raise ValueError(f"training subject has no mask: {subject_id}")
+
+    volume = _load_array(subject.volume_path)
+    mask = _load_array(subject.mask_path)
 
     patches = core_patchers.nonoverlapping_patcher(volume, mask, patch_size)
     patches = core_patchers.materialize_patches(patches, patch_dir, subject_id, augmentation_factor)
@@ -41,13 +47,13 @@ def patch_subject_non_overlapping(subject: dict, patch_dir: Path, patch_size: in
     return patches
 
 
-def patch_subject_target_centered(subject: dict, patch_dir: Path, patch_size: int, augmentation_factor: int, model: CandidateDetector, device: torch.device, threshold: float):
-    subject_id = subject["subject_id"]
-    volume_path = subject["volume_path"]
-    mask_path = subject["mask_path"]
+def patch_subject_target_centered(subject: PreprocessedSubject, patch_dir: Path, patch_size: int, augmentation_factor: int, model: CandidateDetector, device: torch.device, threshold: float):
+    subject_id = subject.subject_id
+    if subject.mask_path is None:
+        raise ValueError(f"training subject has no mask: {subject_id}")
 
-    volume = core_utils.nifti_to_numpy(core_utils.load_volume(volume_path))
-    mask = core_utils.nifti_to_numpy(core_utils.load_volume(mask_path))
+    volume = _load_array(subject.volume_path)
+    mask = _load_array(subject.mask_path)
 
     logits = core_processor.infer(model, device, volume)
     output = F.softmax(logits, dim=1)

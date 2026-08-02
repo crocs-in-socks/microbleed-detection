@@ -7,7 +7,6 @@ from typer.testing import CliRunner
 
 from microbleednet.cli.entrypoint import app
 
-
 runner = CliRunner()
 
 
@@ -99,6 +98,35 @@ def _train_config_dict(dataset_dir: Path, experiment_dir: Path) -> dict:
     }
 
 
+def _write_preprocessed_manifest(manifest_dir: Path, subjects: list[dict]) -> None:
+    """Write a schema-valid preprocessed manifest for the given subjects."""
+    from microbleednet import manifests
+    from microbleednet.manifests import (
+        PreprocessedDatasetManifest,
+        PreprocessedSubject,
+    )
+
+    now = manifests.timestamp()
+    manifest = PreprocessedDatasetManifest(
+        status=manifests.ManifestStatus.COMPLETE,
+        created_at=now,
+        updated_at=now,
+        preprocess_parameters={},
+        subjects=[
+            PreprocessedSubject(
+                subject_id=subject["subject_id"],
+                volume_path=subject.get(
+                    "volume_path", f"{subject['subject_id']}.nii.gz"
+                ),
+                mask_path=subject.get("mask_path"),
+                bounding_box=[[0, 1], [0, 1], [0, 1]],
+            )
+            for subject in subjects
+        ],
+    )
+    manifests.write_manifest(manifest_dir / "preprocessed.json", manifest)
+
+
 def test_train_dry_run_writes_no_outputs(tmp_path: Path) -> None:
     dataset_dir = tmp_path / "dataset"
     manifest_dir = dataset_dir / "manifests"
@@ -151,7 +179,10 @@ def test_run_stage_writes_failed_manifest_and_reraises(tmp_path: Path) -> None:
     manifest = json.loads(runtime.manifest_path.read_text(encoding="utf-8"))
     assert manifest["status"] == "failed"
     assert manifest["error"]
-    assert "checkpoint_dir" not in manifest
+    assert manifest["manifest_type"] == "training_stage"
+    assert manifest["schema_version"] == 1
+    # A failed stage published no checkpoint.
+    assert manifest["checkpoint_dir"] is None
 
 
 def test_train_emits_provenance_before_training(tmp_path: Path) -> None:
@@ -167,9 +198,7 @@ def test_train_emits_provenance_before_training(tmp_path: Path) -> None:
         {"subject_id": f"s{index}", "mask_path": str(tmp_path / f"s{index}.nii.gz")}
         for index in range(5)
     ]
-    (manifest_dir / "preprocessed.json").write_text(
-        json.dumps({"subjects": subjects}), encoding="utf-8"
-    )
+    _write_preprocessed_manifest(manifest_dir, subjects)
     experiment_dir = tmp_path / "experiment"
     settings = TrainCommandConfig.model_validate(
         {**_train_config_dict(dataset_dir, experiment_dir), "seed": 7}

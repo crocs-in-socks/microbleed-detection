@@ -1,12 +1,12 @@
 import glob
 import re
-from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
 from natsort import natsorted
 
-from .. import storage
+from .. import manifests
+from ..manifests import RawDatasetManifest, RawSource, RawSubject
 from . import constants
 
 # Token that a volume/mask filename pattern must contain exactly once; the text
@@ -55,35 +55,39 @@ def execute(
             f"volumes={unmatched_volumes}, masks={unmatched_masks}"
         )
 
-    subjects = []
-    for subject_id in natsorted(volume_subject_map):
-        mask_path = mask_subject_map.get(subject_id)
-        subjects.append(
-            {
-                "subject_id": subject_id,
-                "volume_path": str(volume_subject_map[subject_id].resolve()),
-                "mask_path": str(mask_path.resolve()) if mask_path else None,
-            }
+    subjects = [
+        RawSubject(
+            subject_id=subject_id,
+            volume_path=str(volume_subject_map[subject_id].resolve()),
+            mask_path=(
+                str(mask_subject_map[subject_id].resolve())
+                if mask_subject_map.get(subject_id)
+                else None
+            ),
         )
+        for subject_id in natsorted(volume_subject_map)
+    ]
 
-    raw_manifest_data = {
-        "stage": "raw",
-        "created_on": datetime.now().isoformat(),
-        "sources": [
-            {
-                "input_dir": str(input_dir.resolve()),
-                "label_dir": str(label_dir.resolve()) if label_dir else None,
-                "volume_pattern": volume_pattern,
-                "mask_pattern": mask_pattern,
-                "added_on": datetime.now().isoformat(),
-            }
+    now = manifests.timestamp()
+    raw_manifest = RawDatasetManifest(
+        status=manifests.ManifestStatus.COMPLETE,
+        created_at=now,
+        updated_at=now,
+        sources=[
+            RawSource(
+                input_dir=str(input_dir.resolve()),
+                label_dir=str(label_dir.resolve()) if label_dir else None,
+                volume_pattern=volume_pattern,
+                mask_pattern=mask_pattern,
+                added_on=now,
+            )
         ],
-        "subjects": subjects,
-        "unmatched_volumes": unmatched_volumes,
-        "unmatched_masks": unmatched_masks,
-    }
+        subjects=subjects,
+        unmatched_volumes=unmatched_volumes,
+        unmatched_masks=unmatched_masks,
+    )
 
-    storage.write_json_atomic(dataset_dir / constants.manifests.raw, raw_manifest_data)
+    manifests.write_manifest(dataset_dir / constants.manifests.raw, raw_manifest)
 
 
 def validate_pattern(pattern: str) -> None:
