@@ -223,6 +223,48 @@ def test_train_emits_provenance_before_training(tmp_path: Path) -> None:
     assert record["seed"] == 7
     assert record["configuration"] == settings.model_dump(mode="json")
 
+    # The train/validation split is persisted before the first stage runs.
+    split = json.loads(
+        (experiment_dir / "manifests" / "split.json").read_text(encoding="utf-8")
+    )
+    assert split["manifest_type"] == "split"
+    assert split["schema_version"] == 1
+    assert sorted(split["train"] + split["validation"]) == [f"s{i}" for i in range(5)]
+    assert not set(split["train"]) & set(split["validation"])
+
+
+def test_persist_split_is_write_once(tmp_path: Path) -> None:
+    import pytest
+
+    from microbleednet.config import DataSplitConfig
+    from microbleednet.manifests import PreprocessedSubject
+    from microbleednet.pipelines import train
+
+    path = tmp_path / "split.json"
+
+    def _subjects(ids: list[str]) -> list[PreprocessedSubject]:
+        return [
+            PreprocessedSubject(
+                subject_id=subject_id,
+                volume_path=f"{subject_id}.nii.gz",
+                mask_path=f"{subject_id}_mask.nii.gz",
+                bounding_box=[[0, 1], [0, 1], [0, 1]],
+            )
+            for subject_id in ids
+        ]
+
+    datasplit = DataSplitConfig(test_size=0.4)
+    train._persist_split(path, _subjects(["a", "b"]), _subjects(["c"]), datasplit)
+    first = path.read_text(encoding="utf-8")
+
+    # An identical rewrite is a no-op.
+    train._persist_split(path, _subjects(["a", "b"]), _subjects(["c"]), datasplit)
+    assert path.read_text(encoding="utf-8") == first
+
+    # A conflicting split is a hard error, never a silent overwrite.
+    with pytest.raises(ValueError, match="different split"):
+        train._persist_split(path, _subjects(["a"]), _subjects(["b", "c"]), datasplit)
+
 
 def test_infer_emits_provenance_before_prediction(tmp_path: Path) -> None:
     from microbleednet.config import InferCommandConfig

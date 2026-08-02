@@ -1,6 +1,7 @@
 import logging
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 import torch
 from sklearn.model_selection import train_test_split
@@ -32,7 +33,11 @@ from ..core.dataloading.datasets import (
     SegmentationPatchDataset,
 )
 from ..core.dataloading.samplers import EqualBatchSampler
-from ..manifests import PreprocessedDatasetManifest, PreprocessedSubject
+from ..manifests import (
+    PreprocessedDatasetManifest,
+    PreprocessedSubject,
+    SplitManifest,
+)
 from . import constants, utils
 
 logger = logging.getLogger(__name__)
@@ -130,6 +135,44 @@ def _write_stage_manifest(
     manifests.write_manifest(path, manifest)
 
 
+def _persist_split(
+    path: Path,
+    train_subjects: list[PreprocessedSubject],
+    validation_subjects: list[PreprocessedSubject],
+    datasplit,
+) -> None:
+    """Write the train/validation split once; refuse a conflicting rewrite.
+
+    The split is durable so a resumed run reads the same partition instead of
+    regenerating it. A byte-identical manifest already on disk is left alone;
+    any divergence is a hard error rather than a silent overwrite.
+    """
+    now = manifests.timestamp()
+    manifest = SplitManifest(
+        status=manifests.ManifestStatus.COMPLETE,
+        created_at=now,
+        updated_at=now,
+        random_state=datasplit.random_state,
+        test_size=datasplit.test_size,
+        shuffle=datasplit.shuffle,
+        train=[subject.subject_id for subject in train_subjects],
+        validation=[subject.subject_id for subject in validation_subjects],
+    )
+    if path.exists():
+        existing = manifests.read_manifest(path, SplitManifest)
+        diverged = (
+            existing.train != manifest.train
+            or existing.validation != manifest.validation
+        )
+        if diverged:
+            raise ValueError(
+                f"split manifest already exists with a different split: {path}"
+            )
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    manifests.write_manifest(path, manifest)
+
+
 def _optimizer_parameters(trainer_config: TrainerConfig) -> dict:
     # clip_norm is intentionally omitted: Trainer applies its own gradient
     # clipping default, which is the value this used to pass explicitly.
@@ -195,6 +238,9 @@ def _build_loaders(
     loader_kwargs = {
         "num_workers": command_config.num_workers,
         "pin_memory": command_config.pin_memory,
+        # Seed each worker's RNG from the (already-seeded) base seed so patch
+        # augmentation is reproducible across workers (ARCHITECTURE.md line 280).
+        "worker_init_fn": provenance.seed_worker,
     }
     train_loader = DataLoader(
         train_dataset, batch_sampler=train_sampler, **loader_kwargs
@@ -410,11 +456,16 @@ def execute(config: TrainCommandConfig) -> None:
     preprocessed_subjects = preprocessed_manifest.subjects
 
     _validate_subjects(preprocessed_subjects)
-    train_subjects, validation_subjects = train_test_split(
-        preprocessed_subjects,
-        test_size=config.datasplit.test_size,
-        random_state=config.datasplit.random_state,
-        shuffle=config.datasplit.shuffle,
+    # train_test_split is untyped; it returns the same element type it is given,
+    # so cast the two halves back to the subject type it erased.
+    train_subjects, validation_subjects = cast(
+        tuple[list[PreprocessedSubject], list[PreprocessedSubject]],
+        train_test_split(
+            preprocessed_subjects,
+            test_size=config.datasplit.test_size,
+            random_state=config.datasplit.random_state,
+            shuffle=config.datasplit.shuffle,
+        ),
     )
 
     device = torch.device(config.device)
@@ -425,6 +476,14 @@ def execute(config: TrainCommandConfig) -> None:
     provenance.seed_everything(config.seed)
     provenance.write_provenance(
         config.experiment_dir, config, seed=config.seed, device=device
+    )
+
+    # Persist the split write-once so a resumed run reuses the same partition.
+    _persist_split(
+        config.experiment_dir / "manifests" / "split.json",
+        train_subjects,
+        validation_subjects,
+        config.datasplit,
     )
 
     detector_checkpoint = train_detector(

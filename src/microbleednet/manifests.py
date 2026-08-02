@@ -152,6 +152,38 @@ class PreprocessedDatasetManifest(Manifest):
         return self
 
 
+class SplitManifest(Manifest):
+    """Write-once record of the train/validation subject split for a run.
+
+    Persisting the split makes a run reproducible independent of the split
+    seed: a resumed or re-launched run reads the same partition rather than
+    regenerating it. Subject IDs are stored in split order.
+    """
+
+    manifest_type: Literal["split"] = "split"
+    random_state: int = Field(description="Seed that produced this split.")
+    test_size: float = Field(description="Validation fraction used for the split.")
+    shuffle: bool = Field(
+        description="Whether subjects were shuffled before splitting."
+    )
+    train: list[str] = Field(description="Training subject IDs, in split order.")
+    validation: list[str] = Field(
+        description="Validation subject IDs, in split order."
+    )
+
+    @model_validator(mode="after")
+    def _disjoint_nonempty(self) -> "SplitManifest":
+        if not self.train or not self.validation:
+            raise ValueError(
+                "a split manifest needs nonempty train and validation sets"
+            )
+        overlap = set(self.train) & set(self.validation)
+        if overlap:
+            raise ValueError(f"train and validation splits overlap: {sorted(overlap)}")
+        _reject_duplicate_ids([*self.train, *self.validation])
+        return self
+
+
 class TrainingStageManifest(Manifest):
     """Manifest a single training stage (detector/teacher/student) writes."""
 
