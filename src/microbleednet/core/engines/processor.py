@@ -1,18 +1,24 @@
-from typing import Optional
+from typing import Optional, cast
 
-import numpy as np
 import nibabel as nib
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.amp import autocast
+from nibabel.affines import voxel_sizes
+from nibabel.orientations import apply_orientation, io_orientation, ornt_transform
 from skimage.measure import label, regionprops
-from nibabel.orientations import io_orientation, ornt_transform, apply_orientation
+from torch.amp.autocast_mode import autocast
 
-from microbleednet.core import utils
-from microbleednet.core import transforms
+from microbleednet.core import transforms, utils
 from microbleednet.core.transforms import frst
-from microbleednet.records import CropTransform, ImageGeometry, PreprocessResult
+from microbleednet.records import (
+    CropTransform,
+    FloatArray,
+    ImageGeometry,
+    IntArray,
+    PreprocessResult,
+)
 
 
 def preprocess(
@@ -24,12 +30,12 @@ def preprocess(
     invert_volume: bool,
     inpaint_vessels: bool,
 ) -> PreprocessResult:
-    source_shape = tuple(int(value) for value in volume.shape)
-    source_affine = volume.affine.copy()
+    source_shape = cast(tuple[int, int, int], tuple(int(v) for v in volume.shape))
+    source_affine = cast(FloatArray, volume.affine).copy()
     source_orientation = io_orientation(source_affine)
     if canonical_orientation:
         canonical_volume = transforms.basic.reorient_to_std(volume)
-        target_orientation = io_orientation(canonical_volume.affine)
+        target_orientation = io_orientation(cast(FloatArray, canonical_volume.affine))
         orientation_transform = ornt_transform(source_orientation, target_orientation)
     else:
         canonical_volume = volume
@@ -38,53 +44,59 @@ def preprocess(
         )
 
     if mask is not None:
-        if not np.allclose(mask.affine, source_affine):
+        if not np.allclose(cast(FloatArray, mask.affine), source_affine):
             raise ValueError("image and mask affines do not match")
         if canonical_orientation:
             mask = transforms.basic.reorient_to_std(mask)
         if mask.shape != canonical_volume.shape:
             raise ValueError("reoriented image and mask shapes do not match")
 
-    volume = canonical_volume
+    processed_volume = canonical_volume
     if extract_brain:
-        volume = transforms.basic.extract_brain(volume)
+        processed_volume = transforms.basic.extract_brain(processed_volume)
 
     if bias_field_correction:
-        volume = transforms.basic.bias_field_correct_n4(volume)
+        processed_volume = transforms.basic.bias_field_correct_n4(processed_volume)
 
-    volume = utils.nifti_to_numpy(volume).astype(np.float32)
-    volume = transforms.basic.normalize_volume(volume)
+    volume_array = utils.nifti_to_numpy(processed_volume).astype(np.float32)
+    volume_array = transforms.basic.normalize_volume(volume_array)
 
     if invert_volume:
-        volume = transforms.basic.invert_volume(volume)
+        volume_array = transforms.basic.invert_volume(volume_array)
 
-    volume, bounding_box = transforms.basic.tight_crop_volume(volume)
-    crop_start = tuple(bounds[0] for bounds in bounding_box)
-    crop_stop = tuple(bounds[1] for bounds in bounding_box)
+    volume_array, bounding_box = transforms.basic.tight_crop_volume(volume_array)
+    crop_start = cast(tuple[int, int, int], tuple(b[0] for b in bounding_box))
+    crop_stop = cast(tuple[int, int, int], tuple(b[1] for b in bounding_box))
+    mask_array: Optional[IntArray] = None
     if mask is not None:
-        mask = utils.nifti_to_numpy(mask).astype(np.int16)
-        mask = transforms.basic.apply_bounding_box(mask, bounding_box)
+        mask_array = utils.nifti_to_numpy(mask).astype(np.int16)
+        mask_array = transforms.basic.apply_bounding_box(mask_array, bounding_box)
 
     if inpaint_vessels:
-        volume = transforms.inpaint_vessels.apply(volume)
+        volume_array = transforms.inpaint_vessels.apply(volume_array)
 
-    canonical_affine = canonical_volume.affine
+    canonical_affine = cast(FloatArray, canonical_volume.affine)
     cropped_affine = transforms.basic.crop_affine(canonical_affine, crop_start)
     geometry = ImageGeometry(
-        shape=tuple(int(value) for value in volume.shape),
+        shape=cast(tuple[int, int, int], tuple(int(v) for v in volume_array.shape)),
         affine=cropped_affine,
-        spacing=tuple(float(value) for value in nib.affines.voxel_sizes(cropped_affine)),
+        spacing=cast(
+            tuple[float, float, float],
+            tuple(float(value) for value in voxel_sizes(cropped_affine)),
+        ),
     )
     transform = CropTransform(
         source_shape=source_shape,
-        canonical_shape=tuple(int(value) for value in canonical_volume.shape),
+        canonical_shape=cast(
+            tuple[int, int, int], tuple(int(v) for v in canonical_volume.shape)
+        ),
         crop_start=crop_start,
         crop_stop=crop_stop,
         source_affine=source_affine,
         canonical_affine=canonical_affine,
-        orientation_transform=orientation_transform,
+        orientation_transform=cast(IntArray, orientation_transform),
     )
-    return PreprocessResult(volume, mask, geometry, transform)
+    return PreprocessResult(volume_array, mask_array, geometry, transform)
 
 
 def restore_to_source(array: np.ndarray, transform: CropTransform) -> nib.Nifti1Image:
@@ -100,20 +112,19 @@ def restore_to_source(array: np.ndarray, transform: CropTransform) -> nib.Nifti1
     )
     canonical[slices] = array
     inverse_orientation = np.empty_like(transform.orientation_transform)
-    for source_axis, (canonical_axis, flip) in enumerate(transform.orientation_transform):
+    for source_axis, (canonical_axis, flip) in enumerate(
+        transform.orientation_transform
+    ):
         inverse_orientation[int(canonical_axis)] = (source_axis, flip)
     source = apply_orientation(canonical, inverse_orientation)
     return nib.Nifti1Image(source, transform.source_affine)
 
-def infer(
-    model: nn.Module,
-    device: torch.device,
-    volume: np.ndarray
-):
-    volume = np.expand_dims(volume, axis=(0, 1)) # Shape: (1, 1, H, W, D)
-    volume = torch.from_numpy(volume).float().to(device)
 
-    volume = frst.prepend_frst_channel(volume)
+def infer(model: nn.Module, device: torch.device, volume: np.ndarray):
+    volume_array = np.expand_dims(volume, axis=(0, 1))  # Shape: (1, 1, H, W, D)
+    volume_tensor = torch.from_numpy(volume_array).float().to(device)
+
+    volume_tensor = frst.prepend_frst_channel(volume_tensor)
 
     model = model.to(device)
     model.eval()
@@ -121,9 +132,9 @@ def infer(
     with torch.no_grad():
         if device.type == "cuda":
             with autocast(device_type=device.type, dtype=torch.float16):
-                logits = model(volume)
+                logits = model(volume_tensor)
         else:
-            logits = model(volume)
+            logits = model(volume_tensor)
 
     return logits
 
@@ -150,10 +161,10 @@ def label_candidates(
     shared labeling-and-scoring step that follows it, with no behavior of its
     own.
     """
-    candidate_labels = label(candidate_mask, connectivity=3)
+    candidate_labels = cast(np.ndarray, label(candidate_mask, connectivity=3))
     regions = regionprops(candidate_labels)
-    mean_probabilities = {
-        region.label: float(probability[candidate_labels == region.label].mean())
+    mean_probabilities: dict[int, float] = {
+        int(region.label): float(probability[candidate_labels == region.label].mean())
         for region in regions
     }
     return candidate_labels, regions, mean_probabilities

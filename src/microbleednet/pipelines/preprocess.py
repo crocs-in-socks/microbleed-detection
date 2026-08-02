@@ -42,7 +42,9 @@ def execute(
         output = processor.preprocess(raw_volume, raw_mask, **preprocessor_parameters)
 
         preprocessed_volume = nib.Nifti1Image(output.image, output.geometry.affine)
-        preprocessed_volume_path = volumes_dir / f"{subject_id}{constants.preprocess.volume_suffix}"
+        preprocessed_volume_path = (
+            volumes_dir / f"{subject_id}{constants.preprocess.volume_suffix}"
+        )
         utils.save_volume(preprocessed_volume, preprocessed_volume_path)
 
         preprocessed_mask_path = None
@@ -50,7 +52,9 @@ def execute(
             if output.mask is None:
                 raise ValueError(f"preprocessing returned no mask for {subject_id}")
             preprocessed_mask = nib.Nifti1Image(output.mask, output.geometry.affine)
-            preprocessed_mask_path = masks_dir / f"{subject_id}{constants.preprocess.mask_suffix}"
+            preprocessed_mask_path = (
+                masks_dir / f"{subject_id}{constants.preprocess.mask_suffix}"
+            )
             utils.save_volume(preprocessed_mask, preprocessed_mask_path)
 
         preprocessed_subjects.append(

@@ -20,8 +20,7 @@ class PreprocessingConfig(FrozenConfig):
     bias_field_correction: bool = Field(
         default=True,
         description=(
-            "Apply SimpleITK N4 bias-field correction "
-            "(paper deviation from FSL FAST)."
+            "Apply SimpleITK N4 bias-field correction (paper deviation from FSL FAST)."
         ),
     )
     invert_volume: bool = Field(
@@ -373,9 +372,13 @@ class TrainCommandConfig(FrozenConfig):
 
 
 class InferCommandConfig(FrozenConfig):
-    volume_path: Path = Field(description="Input source-space volume to run inference on.")
+    volume_path: Path = Field(
+        description="Input source-space volume to run inference on."
+    )
     output_dir: Path = Field(
-        description="Directory to write the predicted mask, probability map, and records.",
+        description=(
+            "Directory to write the predicted mask, probability map, and records."
+        ),
     )
     detector_checkpoint: Path = Field(
         description="Trained candidate-detector checkpoint (.pth).",

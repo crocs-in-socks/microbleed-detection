@@ -1,11 +1,11 @@
 import logging
 from pathlib import Path
+from typing import cast
 
 import nibabel as nib
 import numpy as np
 import torch
 import torch.nn as nn
-
 
 logger = logging.getLogger(__name__)
 
@@ -13,11 +13,11 @@ CHECKPOINT_FORMAT_VERSION = 1
 
 
 def unwrap_model(model: nn.Module) -> nn.Module:
-    return model._orig_mod if hasattr(model, "_orig_mod") else model
+    return cast(nn.Module, model._orig_mod if hasattr(model, "_orig_mod") else model)
 
 
 def load_volume(path: Path) -> nib.Nifti1Image:
-    return nib.load(path)
+    return cast(nib.Nifti1Image, nib.load(path))
 
 
 def save_volume(volume: nib.Nifti1Image, path: Path) -> None:
@@ -28,10 +28,13 @@ def nifti_to_numpy(volume: nib.Nifti1Image) -> np.ndarray:
     return volume.get_fdata()
 
 
-def numpy_to_nifti(array: np.ndarray, reference: nib.Nifti1Image | None = None) -> nib.Nifti1Image:
+def numpy_to_nifti(
+    array: np.ndarray, reference: nib.Nifti1Image | None = None
+) -> nib.Nifti1Image:
     if reference is None:
         return nib.Nifti1Image(array, np.eye(4), nib.Nifti1Header())
     return nib.Nifti1Image(array, reference.affine, reference.header)
+
 
 def load_model_weights(model: nn.Module, device: torch.device, checkpoint_path: Path):
     if not checkpoint_path.is_file():
@@ -44,7 +47,9 @@ def load_model_weights(model: nn.Module, device: torch.device, checkpoint_path: 
     missing, unexpected = unwrap_model(model).load_state_dict(state_dict, strict=False)
 
     if missing or unexpected:
-        raise RuntimeError(f"checkpoint keys do not match; missing={missing}, unexpected={unexpected}")
+        raise RuntimeError(
+            f"checkpoint keys do not match; missing={missing}, unexpected={unexpected}"
+        )
 
     return checkpoint
 

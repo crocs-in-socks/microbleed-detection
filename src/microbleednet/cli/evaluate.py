@@ -18,7 +18,9 @@ app = typer.Typer()
 )
 def evaluate_command(
     config: Annotated[Path, typer.Option(..., exists=True, dir_okay=False)],
-    dry_run: Annotated[bool, typer.Option(help="Validate configuration without writing outputs.")] = False,
+    dry_run: Annotated[
+        bool, typer.Option(help="Validate configuration without writing outputs.")
+    ] = False,
 ) -> None:
     settings = parse_config(config, EvaluateCommandConfig)
     for subject in settings.subjects:
@@ -29,7 +31,10 @@ def evaluate_command(
             if not path.is_file():
                 raise typer.BadParameter(f"configured path does not exist: {path}")
     if dry_run:
-        finish(f"Evaluation configuration valid for {len(settings.subjects)} subjects (dry run)")
+        finish(
+            f"Evaluation configuration valid for {len(settings.subjects)} "
+            "subjects (dry run)"
+        )
         return
     with domain_errors():
         result = evaluate.execute(
@@ -38,4 +43,7 @@ def evaluate_command(
             settings.metadata,
             settings.froc_thresholds,
         )
-    finish(f"Evaluated {len(result['subjects'])} subjects; report written under {settings.output_dir}")
+    finish(
+        f"Evaluated {len(result['subjects'])} subjects; "
+        f"report written under {settings.output_dir}"
+    )

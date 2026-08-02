@@ -1,6 +1,5 @@
 import csv
 import io
-import json
 from pathlib import Path
 
 import numpy as np
@@ -47,30 +46,44 @@ def _load_models(
     return detector.to(device).eval(), student.to(device).eval()
 
 
-def _candidate_records(candidate_mask: np.ndarray, probability: np.ndarray, subject_id: str) -> tuple[list[dict], np.ndarray]:
+def _candidate_records(
+    candidate_mask: np.ndarray, probability: np.ndarray, subject_id: str
+) -> tuple[list[dict], np.ndarray]:
     candidates, regions, mean_probabilities = processor.label_candidates(
         candidate_mask, probability
     )
     records = []
     for region in regions:
-        records.append({
-            "candidate_id": int(region.label),
-            "source_subject": subject_id,
-            "voxel_count": int(region.area),
-            "centroid": [float(value) for value in region.centroid],
-            "bounding_box": [[int(region.bbox[index]), int(region.bbox[index + 3])] for index in range(3)],
-            "detector_probability": mean_probabilities[region.label],
-        })
+        records.append(
+            {
+                "candidate_id": int(region.label),
+                "source_subject": subject_id,
+                "voxel_count": int(region.area),
+                "centroid": [float(value) for value in region.centroid],
+                "bounding_box": [
+                    [int(region.bbox[index]), int(region.bbox[index + 3])]
+                    for index in range(3)
+                ],
+                "detector_probability": mean_probabilities[region.label],
+            }
+        )
     return records, candidates
 
 
-def _student_probabilities(student, patches: list[np.ndarray], device: torch.device, batch_size: int) -> np.ndarray:
+def _student_probabilities(
+    student, patches: list[np.ndarray], device: torch.device, batch_size: int
+) -> np.ndarray:
     if not patches:
         return np.empty(0, dtype=np.float32)
     probabilities = []
     with torch.no_grad():
         for start in range(0, len(patches), batch_size):
-            batch = torch.from_numpy(np.stack(patches[start:start + batch_size])).float().unsqueeze(1).to(device)
+            batch = (
+                torch.from_numpy(np.stack(patches[start : start + batch_size]))
+                .float()
+                .unsqueeze(1)
+                .to(device)
+            )
             batch = frst.prepend_frst_channel(batch)
             logits = student(batch)
             probabilities.append(processor.positive_class_probability(logits))
@@ -139,23 +152,34 @@ def predict_volume(
     detector_logits = processor.infer(detector, device, processed.image)
     detector_probability = processor.positive_class_probability(detector_logits)[0]
     candidate_mask = detector_probability >= detector_threshold
-    candidate_records, candidate_labels = _candidate_records(candidate_mask, detector_probability, subject_id)
+    candidate_records, candidate_labels = _candidate_records(
+        candidate_mask, detector_probability, subject_id
+    )
     candidate_patch_size = student_config.patch_size
     patch_records = []
     patches = []
     for region in regionprops(candidate_labels):
-        center = tuple(int(round(value)) for value in region.centroid)
+        centroid = region.centroid
+        center = (
+            int(round(centroid[0])),
+            int(round(centroid[1])),
+            int(round(centroid[2])),
+        )
         patch, bounds = extract_centered_patch(
             processed.image, center, candidate_patch_size
         )
         patches.append(patch)
         patch_records.append((int(region.label), bounds))
 
-    student_probabilities = _student_probabilities(student, patches, device, patch_batch_size)
+    student_probabilities = _student_probabilities(
+        student, patches, device, patch_batch_size
+    )
     component_mask = np.zeros(processed.image.shape, dtype=np.uint8)
     probability_map = np.zeros(processed.image.shape, dtype=np.float32)
     by_id = {record["candidate_id"]: record for record in candidate_records}
-    for (candidate_id, bounds), student_probability in zip(patch_records, student_probabilities):
+    for (candidate_id, bounds), student_probability in zip(
+        patch_records, student_probabilities
+    ):
         record = by_id[candidate_id]
         record["student_probability"] = float(student_probability)
         record["accepted"] = bool(student_probability >= student_threshold)
@@ -187,7 +211,9 @@ def predict_volume(
 
     output_dir.mkdir(parents=True, exist_ok=True)
     mask_image = processor.restore_to_source(component_mask, processed.transform)
-    probability_image = processor.restore_to_source(probability_map, processed.transform)
+    probability_image = processor.restore_to_source(
+        probability_map, processed.transform
+    )
     mask_path = output_dir / f"{subject_id}_prediction.nii.gz"
     probability_path = output_dir / f"{subject_id}_probability.nii.gz"
     utils.save_volume(mask_image, mask_path)
@@ -195,7 +221,10 @@ def predict_volume(
     record_path = output_dir / f"{subject_id}_components.json"
     csv_path = output_dir / f"{subject_id}_components.csv"
     csv_fieldnames = [
-        "candidate_id", "detector_probability", "student_probability", "accepted"
+        "candidate_id",
+        "detector_probability",
+        "student_probability",
+        "accepted",
     ]
     if postprocessing is not None:
         csv_fieldnames.append("postprocessing_accepted")

@@ -36,6 +36,7 @@ def filter_components(
     components = label_prediction_components(prediction_mask, source_subject)
     brain = brain_mask > 0
     distance = distance_transform_edt(brain)
+    assert distance is not None
     voxel_volume = float(np.prod(spacing))
     results = []
     for component in components:
@@ -50,12 +51,14 @@ def filter_components(
             reasons.append("eccentricity")
         if boundary_distance < minimum_boundary_distance_voxels:
             reasons.append("boundary_distance")
-        component.update({
-            "volume_mm3": volume_mm3,
-            "eccentricity": eccentricity,
-            "boundary_distance_voxels": boundary_distance,
-            "accepted": not reasons,
-            "rejection_reasons": reasons,
-        })
+        component.update(
+            {
+                "volume_mm3": volume_mm3,
+                "eccentricity": eccentricity,
+                "boundary_distance_voxels": boundary_distance,
+                "accepted": not reasons,
+                "rejection_reasons": reasons,
+            }
+        )
         results.append(component)
     return results

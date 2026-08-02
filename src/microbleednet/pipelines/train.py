@@ -98,9 +98,7 @@ def _model_kwargs(model_config: ModelConfig) -> dict:
 
 
 def _validate_subjects(subjects: list[PreprocessedSubject]) -> None:
-    missing = [
-        subject.subject_id for subject in subjects if not subject.mask_path
-    ]
+    missing = [subject.subject_id for subject in subjects if not subject.mask_path]
     if missing:
         raise ValueError(f"training requires masks for subjects: {missing}")
 
@@ -218,9 +216,7 @@ def _build_loaders(
         perform_augmentation=True,
         augmentation=command_config.augmentation,
     )
-    validation_dataset = dataset_class(
-        validation_patches, perform_augmentation=False
-    )
+    validation_dataset = dataset_class(validation_patches, perform_augmentation=False)
 
     train_sampler = EqualBatchSampler(
         train_patches, batch_size=trainer_config.batch_size
@@ -291,9 +287,7 @@ def _run_stage(
             stage=runtime.stage,
             patience=trainer_config.patience,
         )
-        trainer.fit(
-            train_loader, validation_loader, n_epochs=trainer_config.max_epochs
-        )
+        trainer.fit(train_loader, validation_loader, n_epochs=trainer_config.max_epochs)
         _write_stage_manifest(
             runtime.manifest_path,
             runtime.stage,

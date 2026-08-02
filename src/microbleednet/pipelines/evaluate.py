@@ -56,20 +56,35 @@ def evaluate_subjects(
         prediction = utils.nifti_to_numpy(utils.load_volume(subject.prediction_path))
         reference = utils.nifti_to_numpy(utils.load_volume(subject.reference_path))
         if prediction.shape != reference.shape:
-            raise ValueError(f"prediction and reference shapes differ for {subject.subject_id}")
+            raise ValueError(
+                f"prediction and reference shapes differ for {subject.subject_id}"
+            )
         result = match_components(prediction > 0, reference > 0)
         result["subject_id"] = subject.subject_id
         subject_results.append(result)
         references.append(reference)
 
     aggregate = aggregate_metrics(subject_results)
-    report = {"metadata": metadata or {}, "subjects": subject_results, "aggregate": aggregate}
+    report = {
+        "metadata": metadata or {},
+        "subjects": subject_results,
+        "aggregate": aggregate,
+    }
 
-    subject_fieldnames = ["subject_id", "true_positives", "false_negatives", "false_positives", "prediction_count", "reference_count"]
+    subject_fieldnames = [
+        "subject_id",
+        "true_positives",
+        "false_negatives",
+        "false_positives",
+        "prediction_count",
+        "reference_count",
+    ]
     subject_buffer = io.StringIO()
     subject_writer = csv.DictWriter(subject_buffer, fieldnames=subject_fieldnames)
     subject_writer.writeheader()
-    subject_writer.writerows({key: result[key] for key in subject_fieldnames} for result in subject_results)
+    subject_writer.writerows(
+        {key: result[key] for key in subject_fieldnames} for result in subject_results
+    )
 
     aggregate_buffer = io.StringIO()
     aggregate_writer = csv.DictWriter(aggregate_buffer, fieldnames=list(aggregate))
@@ -78,14 +93,18 @@ def evaluate_subjects(
 
     # Publish data first, then the report that advertises completion last.
     storage.write_json_atomic(output_dir / "evaluation.json", report)
-    storage.write_text_atomic(output_dir / "subject_metrics.csv", subject_buffer.getvalue())
-    storage.write_text_atomic(output_dir / "aggregate_metrics.csv", aggregate_buffer.getvalue())
+    storage.write_text_atomic(
+        output_dir / "subject_metrics.csv", subject_buffer.getvalue()
+    )
+    storage.write_text_atomic(
+        output_dir / "aggregate_metrics.csv", aggregate_buffer.getvalue()
+    )
 
     if froc_thresholds is not None:
         _write_froc(subjects, references, froc_thresholds, output_dir)
 
     try:
-        import matplotlib.pyplot as plt
+        import matplotlib.pyplot as plt  # pyright: ignore[reportMissingImports]
     except ImportError:
         plt = None
         logger.info(
@@ -94,7 +113,14 @@ def evaluate_subjects(
         )
     if plt is not None:
         figure, axis = plt.subplots()
-        axis.bar(["TP", "FN", "FP"], [aggregate["true_positives"], aggregate["false_negatives"], aggregate["false_positives"]])
+        axis.bar(
+            ["TP", "FN", "FP"],
+            [
+                aggregate["true_positives"],
+                aggregate["false_negatives"],
+                aggregate["false_positives"],
+            ],
+        )
         axis.set_title("Component evaluation counts")
         figure.savefig(output_dir / "component_counts.png", bbox_inches="tight")
         plt.close(figure)

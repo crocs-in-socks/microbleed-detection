@@ -18,7 +18,9 @@ app = typer.Typer()
 )
 def train_command(
     config: Annotated[Path, typer.Option(..., exists=True, dir_okay=False)],
-    dry_run: Annotated[bool, typer.Option(help="Validate configuration without writing outputs.")] = False,
+    dry_run: Annotated[
+        bool, typer.Option(help="Validate configuration without writing outputs.")
+    ] = False,
 ) -> None:
     settings = parse_config(config, TrainCommandConfig)
     if not (settings.dataset_dir / "manifests" / "preprocessed.json").is_file():

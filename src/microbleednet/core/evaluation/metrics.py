@@ -5,7 +5,9 @@ def _safe_ratio(numerator: int, denominator: int) -> float:
     return float(numerator / denominator) if denominator else 0.0
 
 
-def aggregate_metrics(subject_matches: Iterable[dict[str, Any]], subject_count: int | None = None) -> dict[str, Any]:
+def aggregate_metrics(
+    subject_matches: Iterable[dict[str, Any]], subject_count: int | None = None
+) -> dict[str, Any]:
     matches = list(subject_matches)
     count = len(matches) if subject_count is None else subject_count
     if count < 0:
@@ -19,6 +21,8 @@ def aggregate_metrics(subject_matches: Iterable[dict[str, Any]], subject_count: 
         "false_positives": false_positives,
         "subject_count": count,
         "cluster_tpr": _safe_ratio(true_positives, true_positives + false_negatives),
-        "cluster_precision": _safe_ratio(true_positives, true_positives + false_positives),
+        "cluster_precision": _safe_ratio(
+            true_positives, true_positives + false_positives
+        ),
         "false_positives_per_subject": _safe_ratio(false_positives, count),
     }

@@ -51,8 +51,7 @@ def execute(
     unmatched_masks = sorted(mask_ids - volume_ids)
     if require_masks and (unmatched_volumes or unmatched_masks):
         raise ValueError(
-            "unmatched subjects: "
-            f"volumes={unmatched_volumes}, masks={unmatched_masks}"
+            f"unmatched subjects: volumes={unmatched_volumes}, masks={unmatched_masks}"
         )
 
     subjects = [
@@ -93,9 +92,7 @@ def execute(
 def validate_pattern(pattern: str) -> None:
     placeholder = _SUBJECT_ID_PLACEHOLDER
     if pattern.count(placeholder) != 1:
-        raise ValueError(
-            "pattern must contain exactly one '{subject_id}' placeholder"
-        )
+        raise ValueError("pattern must contain exactly one '{subject_id}' placeholder")
 
 
 def _build_subject_map(
