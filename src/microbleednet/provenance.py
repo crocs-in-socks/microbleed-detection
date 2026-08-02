@@ -10,7 +10,7 @@ import numpy as np
 import torch
 from pydantic import BaseModel, ConfigDict, Field
 
-from microbleednet.core import utils
+from microbleednet import storage
 
 
 class ProvenanceRecord(BaseModel):
@@ -125,7 +125,7 @@ def write_provenance(
 ) -> Path:
     path = run_directory / "provenance.json"
     record = capture_provenance(config, seed, device)
-    utils.write_json_atomic(path, record.model_dump(mode="json"))
+    storage.write_json_atomic(path, record.model_dump(mode="json"))
     return path
 
 
@@ -149,5 +149,5 @@ def write_split_manifest(
             raise ValueError(f"split manifest already exists with different contents: {path}")
         return path
 
-    utils.write_json_atomic(path, manifest)
+    storage.write_json_atomic(path, manifest)
     return path

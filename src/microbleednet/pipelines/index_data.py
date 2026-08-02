@@ -6,7 +6,7 @@ from typing import Optional
 
 from natsort import natsorted
 
-from ..core import utils
+from .. import storage
 from . import constants
 
 # Token that a volume/mask filename pattern must contain exactly once; the text
@@ -83,7 +83,7 @@ def execute(
         "unmatched_masks": unmatched_masks,
     }
 
-    utils.write_json_atomic(dataset_dir / constants.manifests.raw, raw_manifest_data)
+    storage.write_json_atomic(dataset_dir / constants.manifests.raw, raw_manifest_data)
 
 
 def validate_pattern(pattern: str) -> None:

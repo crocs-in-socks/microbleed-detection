@@ -7,7 +7,7 @@ import torch
 from sklearn.model_selection import train_test_split
 from torch.utils.data import BatchSampler, DataLoader, SequentialSampler
 
-from .. import provenance
+from .. import provenance, storage
 from ..config import (
     DetectorConfig,
     ModelConfig,
@@ -108,7 +108,7 @@ def _validate_subjects(subjects: list[dict]) -> None:
 
 def _write_stage_manifest(path: Path, stage: str, status: str, **details) -> None:
     payload = {"stage": stage, "status": status, **details}
-    core_utils.write_json_atomic(path, payload)
+    storage.write_json_atomic(path, payload)
 
 
 def _optimizer_parameters(trainer_config: TrainerConfig) -> dict:
