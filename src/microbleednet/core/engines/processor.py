@@ -6,6 +6,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.amp import autocast
+from skimage.measure import label, regionprops
 from nibabel.orientations import io_orientation, ornt_transform, apply_orientation
 
 from microbleednet.core import utils
@@ -135,3 +136,24 @@ def positive_class_probability(logits: torch.Tensor) -> np.ndarray:
     output shape (Batch, ...).
     """
     return F.softmax(logits, dim=1)[:, 1].cpu().numpy()
+
+
+def label_candidates(
+    candidate_mask: np.ndarray, probability: np.ndarray
+) -> tuple[np.ndarray, list, dict[int, float]]:
+    """Label connected candidate components and score each by mean probability.
+
+    Runs 26-connected labeling (``connectivity=3``) over ``candidate_mask`` and
+    returns the label volume, the ``skimage`` regions, and a mapping from each
+    region label to the mean ``probability`` over that component's voxels.
+    Callers own the threshold that produced ``candidate_mask`` — this is the
+    shared labeling-and-scoring step that follows it, with no behavior of its
+    own.
+    """
+    candidate_labels = label(candidate_mask, connectivity=3)
+    regions = regionprops(candidate_labels)
+    mean_probabilities = {
+        region.label: float(probability[candidate_labels == region.label].mean())
+        for region in regions
+    }
+    return candidate_labels, regions, mean_probabilities

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from skimage.measure import label, regionprops
+from skimage.measure import regionprops
 
 from .. import provenance, storage
 from ..config import (
@@ -46,16 +46,18 @@ def _load_models(
 
 
 def _candidate_records(candidate_mask: np.ndarray, probability: np.ndarray, subject_id: str) -> tuple[list[dict], np.ndarray]:
+    candidates, regions, mean_probabilities = processor.label_candidates(
+        candidate_mask, probability
+    )
     records = []
-    candidates = label(candidate_mask, connectivity=3)
-    for region in regionprops(candidates):
+    for region in regions:
         records.append({
             "candidate_id": int(region.label),
             "source_subject": subject_id,
             "voxel_count": int(region.area),
             "centroid": [float(value) for value in region.centroid],
             "bounding_box": [[int(region.bbox[index]), int(region.bbox[index + 3])] for index in range(3)],
-            "detector_probability": float(probability[candidates == region.label].mean()),
+            "detector_probability": mean_probabilities[region.label],
         })
     return records, candidates
 
