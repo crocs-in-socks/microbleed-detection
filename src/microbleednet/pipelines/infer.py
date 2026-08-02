@@ -19,6 +19,7 @@ from ..core.common.models import CandidateDetector, CandidateDiscriminatorStuden
 from ..core.engines import processor
 from ..core.transforms import frst
 from ..core.transforms.patch import _extract_fixed_patch
+from ..records import PredictionSummary
 
 
 def _load_models(
@@ -83,7 +84,7 @@ def predict_volume(
     device: torch.device = torch.device("cpu"),
     patch_batch_size: int = 8,
     subject_id: str | None = None,
-) -> dict:
+) -> PredictionSummary:
     if patch_batch_size <= 0:
         raise ValueError("patch_batch_size must be positive")
     detector_threshold = detector_config.probability_threshold
@@ -135,10 +136,16 @@ def predict_volume(
         writer.writeheader()
         for record in candidate_records:
             writer.writerow({key: record.get(key) for key in writer.fieldnames})
-    return {"subject_id": subject_id, "mask_path": str(mask_path), "probability_path": str(probability_path), "components_path": str(record_path), "component_count": len(candidate_records)}
+    return PredictionSummary(
+        subject_id=subject_id,
+        mask_path=mask_path,
+        probability_path=probability_path,
+        components_path=record_path,
+        component_count=len(candidate_records),
+    )
 
 
-def execute(config: InferCommandConfig) -> dict:
+def execute(config: InferCommandConfig) -> PredictionSummary:
     device = torch.device(config.device)
     config.output_dir.mkdir(parents=True, exist_ok=True)
 

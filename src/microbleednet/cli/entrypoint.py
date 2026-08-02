@@ -175,7 +175,7 @@ def infer_command(
         return
     with domain_errors():
         result = infer.execute(settings)
-    _finish(f"Wrote prediction artifacts under {result['mask_path']}")
+    _finish(f"Wrote prediction artifacts under {result.mask_path}")
 
 
 @app.command(
