@@ -1,27 +1,11 @@
 import math
 from pathlib import Path
-from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class FrozenConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
-
-
-class DataConfig(FrozenConfig):
-    modality: Literal["T2*-GRE", "SWI"] = Field(
-        description=(
-            "Input MRI modality. Only T2*-GRE and SWI are supported; QSM is rejected."
-        ),
-    )
-    require_masks: bool = Field(
-        default=True,
-        description=(
-            "Require a lesion mask for every subject "
-            "(needed for training and evaluation)."
-        ),
-    )
 
 
 class PreprocessingConfig(FrozenConfig):
@@ -239,54 +223,6 @@ class PostprocessingConfig(FrozenConfig):
             "brain boundary."
         ),
     )
-
-
-class EvaluationConfig(FrozenConfig):
-    detector_thresholds: tuple[float, ...] = Field(
-        description=(
-            "Detector probability thresholds to sweep for FROC, each in [0, 1]."
-        ),
-    )
-    discriminator_thresholds: tuple[float, ...] = Field(
-        description=(
-            "Discriminator probability thresholds to sweep for FROC, each in [0, 1]."
-        ),
-    )
-
-    @model_validator(mode="after")
-    def validate_thresholds(self) -> "EvaluationConfig":
-        thresholds = self.detector_thresholds + self.discriminator_thresholds
-        if not thresholds or any(value < 0.0 or value > 1.0 for value in thresholds):
-            raise ValueError("evaluation thresholds must be in the range [0, 1]")
-        return self
-
-
-class DetectorRunConfig(FrozenConfig):
-    data: DataConfig
-    preprocessing: PreprocessingConfig
-    augmentation: AugmentationConfig
-    detector: DetectorConfig
-    trainer: TrainerConfig
-    postprocessing: PostprocessingConfig
-    evaluation: EvaluationConfig
-
-
-class TeacherRunConfig(DetectorRunConfig):
-    teacher: TeacherConfig
-
-
-class StudentRunConfig(DetectorRunConfig):
-    teacher: TeacherConfig
-    student: StudentConfig
-
-
-class InferenceConfig(FrozenConfig):
-    data: DataConfig
-    preprocessing: PreprocessingConfig
-    detector: DetectorConfig
-    student: StudentConfig
-    postprocessing: PostprocessingConfig
-    evaluation: EvaluationConfig
 
 
 class PreprocessCommandConfig(FrozenConfig):
