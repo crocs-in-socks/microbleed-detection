@@ -3,6 +3,7 @@ import logging
 from pathlib import Path
 from typing import Any, Iterable
 
+from .. import storage
 from ..config import EvaluationSubject
 from ..core import utils
 from ..core.evaluation.matching import match_components
@@ -29,7 +30,7 @@ def evaluate_subjects(
 
     aggregate = aggregate_metrics(subject_results)
     report = {"metadata": metadata or {}, "subjects": subject_results, "aggregate": aggregate}
-    utils.write_json_atomic(output_dir / "evaluation.json", report)
+    storage.write_json_atomic(output_dir / "evaluation.json", report)
     with (output_dir / "subject_metrics.csv").open("w", newline="", encoding="utf-8") as csv_file:
         fieldnames = ["subject_id", "true_positives", "false_negatives", "false_positives", "prediction_count", "reference_count"]
         writer = csv.DictWriter(csv_file, fieldnames=fieldnames)

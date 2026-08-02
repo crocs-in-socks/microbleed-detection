@@ -1,9 +1,5 @@
-import json
 import logging
-import os
-import tempfile
 from pathlib import Path
-from typing import Any
 
 import nibabel as nib
 import numpy as np
@@ -26,19 +22,6 @@ def load_volume(path: Path) -> nib.Nifti1Image:
 
 def save_volume(volume: nib.Nifti1Image, path: Path) -> None:
     nib.save(volume, path)
-
-
-def write_json_atomic(path: Path, data: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(
-        mode="w", encoding="utf-8", dir=path.parent, delete=False
-    ) as temporary_file:
-        temporary_path = Path(temporary_file.name)
-        json.dump(data, temporary_file, indent=2, sort_keys=True)
-        temporary_file.write("\n")
-        temporary_file.flush()
-        os.fsync(temporary_file.fileno())
-    os.replace(temporary_path, path)
 
 
 def nifti_to_numpy(volume: nib.Nifti1Image) -> np.ndarray:

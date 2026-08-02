@@ -7,7 +7,7 @@ import torch
 import torch.nn.functional as F
 from skimage.measure import label, regionprops
 
-from .. import provenance
+from .. import provenance, storage
 from ..config import (
     DetectorConfig,
     InferCommandConfig,
@@ -129,7 +129,7 @@ def predict_volume(
     utils.save_volume(mask_image, mask_path)
     utils.save_volume(probability_image, probability_path)
     record_path = output_dir / f"{subject_id}_components.json"
-    utils.write_json_atomic(record_path, {"subject_id": subject_id, "components": candidate_records})
+    storage.write_json_atomic(record_path, {"subject_id": subject_id, "components": candidate_records})
     csv_path = output_dir / f"{subject_id}_components.csv"
     with csv_path.open("w", newline="", encoding="utf-8") as csv_file:
         writer = csv.DictWriter(csv_file, fieldnames=["candidate_id", "detector_probability", "student_probability", "accepted"])

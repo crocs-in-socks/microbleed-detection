@@ -4,9 +4,10 @@ from datetime import datetime
 
 import nibabel as nib
 
-from . import constants
+from .. import storage
 from ..config import PreprocessingConfig
 from ..core import utils
+from . import constants
 from ..core.engines import processor
 
 def execute(
@@ -66,4 +67,6 @@ def execute(
             "preprocess_parameters": preprocessor_parameters,
             "subjects": preprocessed_subjects,
         }
-        utils.write_json_atomic(preprocessed_manifest_path, preprocessed_manifest_data)
+        storage.write_json_atomic(
+            preprocessed_manifest_path, preprocessed_manifest_data
+        )
