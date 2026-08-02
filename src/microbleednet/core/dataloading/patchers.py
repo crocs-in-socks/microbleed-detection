@@ -6,9 +6,10 @@ import tempfile
 
 import numpy as np
 
-from .. import constants
-
 from microbleednet.core.transforms import patch
+
+# No augmentation multiplier unless a caller asks for one.
+_DEFAULT_AUGMENTATION_FACTOR = 1
 
 def nonoverlapping_patcher(
     volume: np.ndarray,
@@ -49,7 +50,7 @@ def materialize_patches(
     patches: list,
     patch_dir: Path,
     volume_identifier: str,
-    augmentation_factor: int = constants.dataloading.patchers.default.augmentation_factor,
+    augmentation_factor: int = _DEFAULT_AUGMENTATION_FACTOR,
 ):
     patch_dir.mkdir(parents=True, exist_ok=True)
 

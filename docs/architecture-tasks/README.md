@@ -47,7 +47,7 @@ order, not a hard requirement; each slice states its own dependencies.
 | 03 | Logging: stdlib in core/pipelines, Rich in cli    | medium | —          | done   |
 | 04 | Error-handling boundary                           | medium | 03         | done   |
 | 05 | Remove constants drift (aug + distillation)       | medium | 10         | done   |
-| 06 | Dissolve remaining constants files into models    | medium | 05         | todo   |
+| 06 | Dissolve remaining constants files into models    | medium | 05         | done   |
 | 07 | Isolate optional / heavy dependencies             | low    | —          | done   |
 | 08 | Replace loose dicts at layer boundaries           | high   | 10         | todo   |
 | 09 | Provenance as a first-class output                | medium | —          | done (typed record + train emission wiring) |

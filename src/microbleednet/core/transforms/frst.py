@@ -3,16 +3,22 @@ import torch
 import torchvision.transforms.functional as F
 from collections.abc import Sequence
 
-from .. import constants
+# Fast Radial Symmetry Transform defaults. Structural parameters of the
+# transform; not exposed through the config models.
+_DEFAULT_RADII = [2, 3, 4, 6]
+_DEFAULT_ALPHA = 2
+_DEFAULT_FACTOR_STD = 0.1
+_DEFAULT_BRIGHT = True
+_DEFAULT_DARK = False
 
 
 def apply(
-    volumes: torch.Tensor, 
-    radii: Sequence[float] = constants.transforms.frst.radii,
-    alpha: float = constants.transforms.frst.alpha, 
-    factor_std: float = constants.transforms.frst.factor_std, 
-    bright: bool = constants.transforms.frst.bright, 
-    dark: bool = constants.transforms.frst.dark
+    volumes: torch.Tensor,
+    radii: Sequence[float] = _DEFAULT_RADII,
+    alpha: float = _DEFAULT_ALPHA,
+    factor_std: float = _DEFAULT_FACTOR_STD,
+    bright: bool = _DEFAULT_BRIGHT,
+    dark: bool = _DEFAULT_DARK
 ) -> torch.Tensor:
     """
     Batched 3D FRST on GPU.

@@ -2,16 +2,17 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .. import constants
-
 
 class SingleConv(nn.Module):
     """
     convolution -> batch-normalization -> relu
     """
 
+    # Same-size padding for the 3x3x3 convolutions used throughout the U-Net.
+    _DEFAULT_PADDING = 1
+
     def __init__(
-        self, in_channels: int, out_channels: int, kernel_size: int, padding: int = constants.common.layers.single_conv.default.padding
+        self, in_channels: int, out_channels: int, kernel_size: int, padding: int = _DEFAULT_PADDING
     ):
         super().__init__()
         self.layer = nn.Sequential(
