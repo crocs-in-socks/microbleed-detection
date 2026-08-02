@@ -1,10 +1,9 @@
 import importlib.metadata
-import json
 import platform
 import random
 import subprocess
 from pathlib import Path
-from typing import Any, Iterable, Optional
+from typing import Any, Optional
 
 import numpy as np
 import torch
@@ -126,28 +125,4 @@ def write_provenance(
     path = run_directory / "provenance.json"
     record = capture_provenance(config, seed, device)
     storage.write_json_atomic(path, record.model_dump(mode="json"))
-    return path
-
-
-def write_split_manifest(
-    path: Path,
-    splits: dict[str, Iterable[str]],
-) -> Path:
-    normalized = {
-        name: sorted(set(subject_ids))
-        for name, subject_ids in splits.items()
-    }
-    if set(normalized) != {"train", "validation", "tuning", "test"}:
-        raise ValueError("splits must contain train, validation, tuning, and test")
-    if any(not subject_id for values in normalized.values() for subject_id in values):
-        raise ValueError("split subject IDs must be nonempty")
-
-    manifest = {"splits": normalized}
-    if path.exists():
-        existing = json.loads(path.read_text(encoding="utf-8"))
-        if existing != manifest:
-            raise ValueError(f"split manifest already exists with different contents: {path}")
-        return path
-
-    storage.write_json_atomic(path, manifest)
     return path
