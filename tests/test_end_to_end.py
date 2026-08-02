@@ -13,7 +13,7 @@ runner = CliRunner()
 def test_root_and_command_help() -> None:
     root = runner.invoke(app, ["--help"])
     assert root.exit_code == 0
-    for command in ("validate-data", "preprocess", "train", "infer", "evaluate", "index-data"):
+    for command in ("preprocess", "train", "infer", "evaluate", "index-data"):
         result = runner.invoke(app, [command, "--help"])
         assert result.exit_code == 0, result.output
 

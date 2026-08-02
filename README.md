@@ -56,11 +56,9 @@ uv run microbleednet index-data `
 	--mask-pattern "{subject_id}.nii.gz"
 ```
 
-Validate the indexed subjects and preprocess them with a JSON or TOML
-configuration:
+Preprocess the indexed subjects with a JSON or TOML configuration:
 
 ```powershell
-uv run microbleednet validate-data --dataset-dir data/dataset
 uv run microbleednet preprocess --config path/to/preprocess.json --dry-run
 uv run microbleednet preprocess --config path/to/preprocess.json
 ```
