@@ -62,7 +62,3 @@ def initialize_teacher_from_detector(detector: nn.Module, teacher: nn.Module) ->
         raise RuntimeError(f"detector-to-teacher keys missing in teacher: {missing}")
     teacher_state.update(transferable)
     unwrap_model(teacher).load_state_dict(teacher_state, strict=True)
-
-
-def load_teacher_for_student(teacher: nn.Module, checkpoint_path: Path, device: torch.device):
-    return load_model_weights(teacher, device, checkpoint_path)

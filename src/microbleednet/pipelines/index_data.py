@@ -121,17 +121,6 @@ def compute_paths(dir: Path, pattern: str) -> list[Path]:
     return natsorted(dir.rglob(glob_pattern))
 
 
-def remove_overlap(
-    paths_a: list[Path],
-    paths_b: list[Path]
-) -> tuple[list[Path], list[Path]]:
-    overlap = set(paths_a) & set(paths_b)
-    return (
-        natsorted(set(paths_a) - overlap),
-        natsorted(set(paths_b) - overlap),
-    )
-
-
 def extract_subject_id(root_dir: Path, path: Path, pattern: str) -> Optional[str]:
     validate_pattern(pattern)
     clean_path = path.relative_to(root_dir)
