@@ -1,7 +1,9 @@
 import csv
-import json
+import io
 from pathlib import Path
 from typing import Any, Callable, Iterable
+
+from microbleednet import storage
 
 from .metrics import aggregate_metrics
 
@@ -19,8 +21,6 @@ def sweep_thresholds(
 
 
 def write_froc(points: list[dict[str, Any]], json_path: Path, csv_path: Path) -> None:
-    json_path.parent.mkdir(parents=True, exist_ok=True)
-    json_path.write_text(json.dumps(points, indent=2) + "\n", encoding="utf-8")
     fieldnames = [
         "threshold",
         "true_positives",
@@ -31,7 +31,11 @@ def write_froc(points: list[dict[str, Any]], json_path: Path, csv_path: Path) ->
         "cluster_precision",
         "false_positives_per_subject",
     ]
-    with csv_path.open("w", newline="", encoding="utf-8") as csv_file:
-        writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(points)
+    buffer = io.StringIO()
+    writer = csv.DictWriter(buffer, fieldnames=fieldnames)
+    writer.writeheader()
+    writer.writerows(points)
+    # Write the JSON payload first, then the CSV report last: a reader that sees
+    # the CSV can rely on the machine-readable points already being present.
+    storage.write_json_atomic(json_path, points)
+    storage.write_text_atomic(csv_path, buffer.getvalue())

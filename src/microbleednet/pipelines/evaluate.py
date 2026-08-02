@@ -1,4 +1,5 @@
 import csv
+import io
 import logging
 from pathlib import Path
 from typing import Any, Iterable
@@ -30,16 +31,22 @@ def evaluate_subjects(
 
     aggregate = aggregate_metrics(subject_results)
     report = {"metadata": metadata or {}, "subjects": subject_results, "aggregate": aggregate}
+
+    subject_fieldnames = ["subject_id", "true_positives", "false_negatives", "false_positives", "prediction_count", "reference_count"]
+    subject_buffer = io.StringIO()
+    subject_writer = csv.DictWriter(subject_buffer, fieldnames=subject_fieldnames)
+    subject_writer.writeheader()
+    subject_writer.writerows({key: result[key] for key in subject_fieldnames} for result in subject_results)
+
+    aggregate_buffer = io.StringIO()
+    aggregate_writer = csv.DictWriter(aggregate_buffer, fieldnames=list(aggregate))
+    aggregate_writer.writeheader()
+    aggregate_writer.writerow(aggregate)
+
+    # Publish data first, then the report that advertises completion last.
     storage.write_json_atomic(output_dir / "evaluation.json", report)
-    with (output_dir / "subject_metrics.csv").open("w", newline="", encoding="utf-8") as csv_file:
-        fieldnames = ["subject_id", "true_positives", "false_negatives", "false_positives", "prediction_count", "reference_count"]
-        writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows({key: result[key] for key in fieldnames} for result in subject_results)
-    with (output_dir / "aggregate_metrics.csv").open("w", newline="", encoding="utf-8") as csv_file:
-        writer = csv.DictWriter(csv_file, fieldnames=list(aggregate))
-        writer.writeheader()
-        writer.writerow(aggregate)
+    storage.write_text_atomic(output_dir / "subject_metrics.csv", subject_buffer.getvalue())
+    storage.write_text_atomic(output_dir / "aggregate_metrics.csv", aggregate_buffer.getvalue())
 
     try:
         import matplotlib.pyplot as plt

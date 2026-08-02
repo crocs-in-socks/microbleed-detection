@@ -18,8 +18,12 @@ from pathlib import Path
 from typing import Any
 
 
-def write_json_atomic(path: Path, data: dict[str, Any]) -> None:
-    """Serialize ``data`` to ``path`` as JSON, replacing it atomically."""
+def write_json_atomic(path: Path, data: dict[str, Any] | list[Any]) -> None:
+    """Serialize ``data`` to ``path`` as JSON, replacing it atomically.
+
+    Accepts either a JSON object or a top-level array; both are valid JSON
+    documents that callers need to persist.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(
         mode="w", encoding="utf-8", dir=path.parent, delete=False
