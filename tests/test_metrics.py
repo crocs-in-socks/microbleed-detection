@@ -40,11 +40,18 @@ def test_fragmented_prediction_and_merged_reference_are_counted_auditably() -> N
 def test_empty_cases_and_cohort_metrics_use_all_subjects() -> None:
     empty = _mask()
     result = match_components(empty, empty)
-    assert result["true_positives"] == result["false_positives"] == result["false_negatives"] == 0
-    metrics = aggregate_metrics([
-        {"true_positives": 1, "false_negatives": 1, "false_positives": 1},
-        {"true_positives": 0, "false_negatives": 0, "false_positives": 2},
-    ])
+    assert (
+        result["true_positives"]
+        == result["false_positives"]
+        == result["false_negatives"]
+        == 0
+    )
+    metrics = aggregate_metrics(
+        [
+            {"true_positives": 1, "false_negatives": 1, "false_positives": 1},
+            {"true_positives": 0, "false_negatives": 0, "false_positives": 2},
+        ]
+    )
     assert metrics["cluster_tpr"] == 0.5
     assert metrics["cluster_precision"] == 1 / 4
     assert metrics["false_positives_per_subject"] == 1.5

@@ -18,7 +18,9 @@ app = typer.Typer()
 )
 def infer_command(
     config: Annotated[Path, typer.Option(..., exists=True, dir_okay=False)],
-    dry_run: Annotated[bool, typer.Option(help="Validate configuration without writing outputs.")] = False,
+    dry_run: Annotated[
+        bool, typer.Option(help="Validate configuration without writing outputs.")
+    ] = False,
 ) -> None:
     settings = parse_config(config, InferCommandConfig)
     for label, path in (
@@ -27,7 +29,9 @@ def infer_command(
         ("student_checkpoint", settings.student_checkpoint),
     ):
         if not path.exists():
-            raise typer.BadParameter(f"configured path does not exist ({label}): {path}")
+            raise typer.BadParameter(
+                f"configured path does not exist ({label}): {path}"
+            )
     if dry_run:
         finish(f"Inference configuration valid for {settings.volume_path} (dry run)")
         return

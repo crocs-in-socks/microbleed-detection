@@ -3,6 +3,7 @@ import torch.nn as nn
 
 from . import layers
 
+
 def weight_init(model):
     """Applies truncated normal initialization."""
     if isinstance(model, (nn.Conv3d, nn.Linear)):
@@ -32,7 +33,7 @@ class CandidateDetector(nn.Module):
         features = self.feature_extractor(x)
         logits = self.segmentor(features)
         return logits
-    
+
 
 class CandidateDiscriminatorTeacher(nn.Module):
     def __init__(
@@ -63,6 +64,7 @@ class CandidateDiscriminatorTeacher(nn.Module):
         classification_logits = self.classifier(features)
         return segmentation_logits, classification_logits
 
+
 class CandidateDiscriminatorStudent(nn.Module):
     def __init__(
         self,
@@ -89,7 +91,6 @@ class CandidateDiscriminatorStudent(nn.Module):
         features = self.feature_extractor(x)
         logits = self.classifier(features)
         return logits
-
 
 
 class FeatureExtractor(nn.Module):
@@ -128,7 +129,7 @@ class Segmentor(nn.Module):
         logits = self.out_conv(x)
 
         return logits
-    
+
 
 class Classifier(nn.Module):
     def __init__(self, in_channels: int, n_classes: int, dropout_rate: float):
@@ -138,7 +139,9 @@ class Classifier(nn.Module):
 
         linear_nodes = [level_channels[1], 128, 32, n_classes]
 
-        self.in_conv = layers.SingleConv(level_channels[0], level_channels[1], 1, padding=0)
+        self.in_conv = layers.SingleConv(
+            level_channels[0], level_channels[1], 1, padding=0
+        )
         self.down_1 = layers.DownConv(level_channels[1], level_channels[1], 3, 3)
         self.down_2 = layers.DownConv(level_channels[1], level_channels[1], 3, 3)
         self.fc_1 = nn.Linear(linear_nodes[0], linear_nodes[1])

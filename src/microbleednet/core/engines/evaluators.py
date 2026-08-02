@@ -6,12 +6,7 @@ from microbleednet.core.common.tasks import BaseTask
 
 
 class Evaluator:
-    def __init__(
-        self,
-        model = nn.Module,
-        device = torch.device,
-        task = BaseTask
-    ):
+    def __init__(self, model: nn.Module, device: torch.device, task: BaseTask):
         self.model = model.to(device)
         self.device = device
         self.task = task

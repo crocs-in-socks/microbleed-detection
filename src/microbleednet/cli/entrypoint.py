@@ -8,7 +8,10 @@ from . import evaluate, index_data, infer, preprocess, train
 
 app = typer.Typer(
     name="microbleednet",
-    help="Research workflow for indexing, preprocessing, training, inference, and evaluation.",
+    help=(
+        "Research workflow for indexing, preprocessing, training, inference, "
+        "and evaluation."
+    ),
     no_args_is_help=True,
 )
 

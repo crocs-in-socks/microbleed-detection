@@ -9,8 +9,12 @@ from microbleednet.core.transforms.patch import (
 )
 
 
-@pytest.mark.parametrize("center", [(0, 0, 0), (0, 3, 3), (3, 0, 3), (3, 3, 0), (3, 3, 3)])
-def test_boundary_candidates_have_fixed_shape_and_center(center: tuple[int, int, int]) -> None:
+@pytest.mark.parametrize(
+    "center", [(0, 0, 0), (0, 3, 3), (3, 0, 3), (3, 3, 0), (3, 3, 3)]
+)
+def test_boundary_candidates_have_fixed_shape_and_center(
+    center: tuple[int, int, int],
+) -> None:
     volume = np.zeros((7, 7, 7), dtype=np.float32)
     target = np.zeros_like(volume, dtype=np.uint8)
     volume[center] = 1

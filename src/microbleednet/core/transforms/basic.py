@@ -1,12 +1,11 @@
 import os
-import tempfile
 import subprocess
+import tempfile
 from pathlib import Path
 
 import nibabel as nib
 import numpy as np
 import SimpleITK as sitk
-
 from scipy.ndimage import gaussian_filter
 
 from .. import utils
@@ -17,6 +16,7 @@ def normalize_volume(volume: np.ndarray) -> np.ndarray:
     if not np.isfinite(maximum) or maximum <= 0:
         raise ValueError("volume is empty or its maximum is not positive and finite")
     return volume / maximum
+
 
 def invert_volume(volume: np.ndarray) -> np.ndarray:
     brain_mask = (volume > 0).astype(int)
@@ -55,11 +55,7 @@ def tight_crop_volume(
 def apply_bounding_box(volume: np.ndarray, bounding_box: tuple) -> np.ndarray:
     (d0_start, d0_end), (d1_start, d1_end), (d2_start, d2_end) = bounding_box
 
-    cropped_volume = volume[
-        d0_start:d0_end, 
-        d1_start:d1_end, 
-        d2_start:d2_end
-    ]
+    cropped_volume = volume[d0_start:d0_end, d1_start:d1_end, d2_start:d2_end]
 
     return cropped_volume
 
@@ -91,7 +87,10 @@ def crop_affine(
 def extract_brain(volume: nib.Nifti1Image) -> nib.Nifti1Image:
     fsldir = Path(os.getenv("FSLDIR", ""))
     if not fsldir.is_dir():
-        raise EnvironmentError("Valid FSLDIR environment variable is not set. Set it using 'export FSLDIR=/path/to/fsl'.")
+        raise EnvironmentError(
+            "Valid FSLDIR environment variable is not set. "
+            "Set it using 'export FSLDIR=/path/to/fsl'."
+        )
 
     with tempfile.TemporaryDirectory(prefix="microbleednet-fsl-bet-") as temp_dir:
         temp_dir = Path(temp_dir)
@@ -108,10 +107,10 @@ def extract_brain(volume: nib.Nifti1Image) -> nib.Nifti1Image:
         # Load back into memory immediately and let tempdir delete the files
         output_volume = utils.load_volume(output_path)
         # Force load data into memory so we don't rely on the deleted temp file
-        volume = utils.nifti_to_numpy(output_volume)
-        volume = utils.numpy_to_nifti(volume, output_volume)
+        output_data = utils.nifti_to_numpy(output_volume)
+        loaded_volume = utils.numpy_to_nifti(output_data, output_volume)
 
-        return volume
+        return loaded_volume
 
 
 def bias_field_correct_n4(volume: nib.Nifti1Image) -> nib.Nifti1Image:
@@ -133,6 +132,6 @@ def bias_field_correct_n4(volume: nib.Nifti1Image) -> nib.Nifti1Image:
 
     return corrected_nifti
 
+
 def calculate_voxel_weights(volume: np.ndarray) -> np.ndarray:
     return gaussian_filter(volume, 1.2) * 10
-

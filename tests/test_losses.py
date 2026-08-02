@@ -7,9 +7,9 @@ from microbleednet.core.common.losses import (
     DiscriminatorTeacherLoss,
 )
 from microbleednet.core.common.models import (
+    CandidateDetector,
     CandidateDiscriminatorStudent,
     CandidateDiscriminatorTeacher,
-    CandidateDetector,
 )
 
 
@@ -19,7 +19,13 @@ def test_detector_loss_matches_weighted_cross_entropy_and_dice() -> None:
     loss = DetectorLoss()(logits, target)
 
     probabilities = torch.softmax(logits, dim=1)
-    expected_cross_entropy = -(torch.log(probabilities[0, 0, 0, 0]) + 10 * torch.log(probabilities[0, 1, 0, 1])) / 11
+    expected_cross_entropy = (
+        -(
+            torch.log(probabilities[0, 0, 0, 0])
+            + 10 * torch.log(probabilities[0, 1, 0, 1])
+        )
+        / 11
+    )
     foreground = probabilities[:, 1]
     expected_dice = 1 - (2 * foreground[0, 0, 1] + 1) / (foreground.sum() + 1 + 1)
     assert torch.allclose(loss, expected_cross_entropy + expected_dice)
@@ -36,7 +42,9 @@ def test_detector_loss_rejects_invalid_targets() -> None:
 
 
 def test_detector_loss_is_finite_for_empty_foreground() -> None:
-    loss = DetectorLoss()(torch.zeros((2, 2, 2, 2, 2)), torch.zeros((2, 2, 2, 2), dtype=torch.long))
+    loss = DetectorLoss()(
+        torch.zeros((2, 2, 2, 2, 2)), torch.zeros((2, 2, 2, 2), dtype=torch.long)
+    )
     assert torch.isfinite(loss)
 
 
@@ -47,8 +55,18 @@ def test_teacher_loss_is_segmentation_plus_classification() -> None:
     classification_target = torch.tensor([0, 1], dtype=torch.long)
     criterion = DiscriminatorTeacherLoss()
     expected = criterion.segmentation_loss(segmentation_logits, segmentation_target)
-    expected = expected + criterion.classification_loss(classification_logits, classification_target)
-    assert torch.allclose(criterion(classification_logits, classification_target, segmentation_logits, segmentation_target), expected)
+    expected = expected + criterion.classification_loss(
+        classification_logits, classification_target
+    )
+    assert torch.allclose(
+        criterion(
+            classification_logits,
+            classification_target,
+            segmentation_logits,
+            segmentation_target,
+        ),
+        expected,
+    )
 
 
 def test_distillation_loss_is_weighted_and_identical_logits_are_zero() -> None:
@@ -61,6 +79,7 @@ def test_distillation_loss_is_weighted_and_identical_logits_are_zero() -> None:
     expected = criterion.alpha * criterion.cross_entropy_loss(student, target)
     assert torch.allclose(loss, expected)
     loss.backward()
+    assert student.grad is not None
     assert torch.isfinite(student.grad).all()
 
 

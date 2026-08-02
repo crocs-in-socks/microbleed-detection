@@ -1,5 +1,6 @@
-import numpy as np
 import hashlib
+
+import numpy as np
 import torch
 from torch.utils.data import Dataset
 
@@ -42,7 +43,7 @@ class BasePatchDataset(Dataset):
 
     def __getitem__(self, idx: int):
         raise NotImplementedError("Subclasses must implement the __getitem__ method.")
-        
+
 
 class SegmentationPatchDataset(BasePatchDataset):
     def __getitem__(self, idx: int):
@@ -52,16 +53,20 @@ class SegmentationPatchDataset(BasePatchDataset):
         mask = patch["mask"]
         if self.perform_augmentation:
             volume, mask = augment(
-                volume, mask, augmentation=self.augmentation,
-                mask_indices=(1,), rng=np.random.default_rng(idx),
+                volume,
+                mask,
+                augmentation=self.augmentation,
+                mask_indices=(1,),
+                rng=np.random.default_rng(idx),
             )
 
-        volume = np.expand_dims(volume, axis=0) # Shape: (1, H, W, D)
+        volume = np.expand_dims(volume, axis=0)  # Shape: (1, H, W, D)
 
         return {
             "volume": torch.from_numpy(volume).float(),
             "mask": torch.from_numpy(mask.astype(np.int64, copy=False)),
         }
+
 
 class SegmentationClassificationPatchDataset(BasePatchDataset):
     def __getitem__(self, idx: int):
@@ -72,16 +77,20 @@ class SegmentationClassificationPatchDataset(BasePatchDataset):
         label = patch["has_microbleed"]
         if self.perform_augmentation:
             volume, mask = augment(
-                volume, mask, augmentation=self.augmentation,
-                mask_indices=(1,), rng=np.random.default_rng(idx),
+                volume,
+                mask,
+                augmentation=self.augmentation,
+                mask_indices=(1,),
+                rng=np.random.default_rng(idx),
             )
 
-        volume = np.expand_dims(volume, axis=0) # Shape: (1, H, W, D)
+        volume = np.expand_dims(volume, axis=0)  # Shape: (1, H, W, D)
         return {
             "volume": torch.from_numpy(volume).float(),
             "mask": torch.from_numpy(mask.astype(np.int64, copy=False)),
             "label": torch.tensor(int(label), dtype=torch.int64),
         }
+
 
 class ClassificationPatchDataset(BasePatchDataset):
     def __getitem__(self, idx):
@@ -92,7 +101,7 @@ class ClassificationPatchDataset(BasePatchDataset):
         if self.perform_augmentation:
             (volume,) = augment(volume, augmentation=self.augmentation)  # Unpack
 
-        volume = np.expand_dims(volume, axis=0) # Shape: (1, H, W, D)
+        volume = np.expand_dims(volume, axis=0)  # Shape: (1, H, W, D)
         return {
             "volume": torch.from_numpy(volume).float(),
             "label": torch.tensor(int(label), dtype=torch.int64),

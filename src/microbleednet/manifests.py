@@ -142,9 +142,7 @@ class PreprocessedDatasetManifest(Manifest):
     preprocess_parameters: dict[str, bool] = Field(
         description="The PreprocessingConfig used, serialized to JSON.",
     )
-    subjects: list[PreprocessedSubject] = Field(
-        description="Preprocessed subjects."
-    )
+    subjects: list[PreprocessedSubject] = Field(description="Preprocessed subjects.")
 
     @model_validator(mode="after")
     def _unique_subjects(self) -> "PreprocessedDatasetManifest":
@@ -167,9 +165,7 @@ class SplitManifest(Manifest):
         description="Whether subjects were shuffled before splitting."
     )
     train: list[str] = Field(description="Training subject IDs, in split order.")
-    validation: list[str] = Field(
-        description="Validation subject IDs, in split order."
-    )
+    validation: list[str] = Field(description="Validation subject IDs, in split order.")
 
     @model_validator(mode="after")
     def _disjoint_nonempty(self) -> "SplitManifest":

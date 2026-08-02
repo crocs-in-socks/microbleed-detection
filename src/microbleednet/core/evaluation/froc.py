@@ -17,7 +17,10 @@ def sweep_thresholds(
         subject_matches = list(evaluate_at_threshold(float(threshold)))
         metrics = aggregate_metrics(subject_matches)
         points.append({"threshold": float(threshold), **metrics})
-    return sorted(points, key=lambda point: (point["false_positives_per_subject"], point["threshold"]))
+    return sorted(
+        points,
+        key=lambda point: (point["false_positives_per_subject"], point["threshold"]),
+    )
 
 
 def write_froc(points: list[dict[str, Any]], json_path: Path, csv_path: Path) -> None:

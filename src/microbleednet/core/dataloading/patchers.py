@@ -1,7 +1,7 @@
-from pathlib import Path
 import hashlib
 import os
 import tempfile
+from pathlib import Path
 
 import numpy as np
 
@@ -11,10 +11,9 @@ from microbleednet.core.transforms import patch
 # No augmentation multiplier unless a caller asks for one.
 _DEFAULT_AUGMENTATION_FACTOR = 1
 
+
 def nonoverlapping_patcher(
-    volume: np.ndarray,
-    mask: np.ndarray,
-    patch_size: int
+    volume: np.ndarray, mask: np.ndarray, patch_size: int
 ) -> list:
     volume_patches = patch.get_nonoverlapping_patches(volume, patch_size)
     mask_patches = patch.get_nonoverlapping_patches(mask, patch_size)
@@ -27,11 +26,9 @@ def nonoverlapping_patcher(
         for volume_patch, mask_patch in zip(volume_patches, mask_patches)
     ]
 
+
 def target_centered_patcher(
-        volume: np.ndarray,
-        mask: np.ndarray,
-        target: np.ndarray,
-        patch_size: int
+    volume: np.ndarray, mask: np.ndarray, target: np.ndarray, patch_size: int
 ) -> list:
     volume_records = patch.get_target_centered_patch_records(volume, target, patch_size)
     mask_records = patch.get_target_centered_patch_records(mask, target, patch_size)
@@ -46,6 +43,7 @@ def target_centered_patcher(
         for volume_record, mask_record in zip(volume_records, mask_records)
     ]
 
+
 def materialize_patches(
     patches: list,
     patch_dir: Path,
@@ -59,11 +57,17 @@ def materialize_patches(
 
     for idx, patch_data in enumerate(patches):
         patch_path = patch_dir / f"patch_{volume_identifier}_{idx:06d}.npz"
-        arrays = {key: value for key, value in patch_data.items() if isinstance(value, np.ndarray)}
-        with tempfile.NamedTemporaryFile(dir=patch_dir, suffix=".npz", delete=False) as temporary_file:
+        arrays = {
+            key: value
+            for key, value in patch_data.items()
+            if isinstance(value, np.ndarray)
+        }
+        with tempfile.NamedTemporaryFile(
+            dir=patch_dir, suffix=".npz", delete=False
+        ) as temporary_file:
             temporary_path = Path(temporary_file.name)
         try:
-            np.savez_compressed(temporary_path, **arrays)
+            np.savez_compressed(temporary_path, **arrays)  # pyright: ignore[reportArgumentType]
             os.replace(temporary_path, patch_path)
         finally:
             temporary_path.unlink(missing_ok=True)

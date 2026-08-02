@@ -18,7 +18,9 @@ app = typer.Typer()
 )
 def preprocess_command(
     config: Annotated[Path, typer.Option(..., exists=True, dir_okay=False)],
-    dry_run: Annotated[bool, typer.Option(help="Validate configuration without writing outputs.")] = False,
+    dry_run: Annotated[
+        bool, typer.Option(help="Validate configuration without writing outputs.")
+    ] = False,
 ) -> None:
     settings = parse_config(config, PreprocessCommandConfig)
     dataset_dir = settings.dataset_dir

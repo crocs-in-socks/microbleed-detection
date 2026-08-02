@@ -40,11 +40,17 @@ def test_preprocess_dry_run_writes_no_outputs(tmp_path: Path) -> None:
     dataset_dir = tmp_path / "dataset"
     manifest_dir = dataset_dir / "manifests"
     manifest_dir.mkdir(parents=True)
-    (manifest_dir / "raw.json").write_text(json.dumps({"subjects": []}), encoding="utf-8")
+    (manifest_dir / "raw.json").write_text(
+        json.dumps({"subjects": []}), encoding="utf-8"
+    )
     config_path = tmp_path / "preprocess.json"
-    config_path.write_text(json.dumps({"dataset_dir": str(dataset_dir)}), encoding="utf-8")
+    config_path.write_text(
+        json.dumps({"dataset_dir": str(dataset_dir)}), encoding="utf-8"
+    )
 
-    result = runner.invoke(app, ["preprocess", "--config", str(config_path), "--dry-run"])
+    result = runner.invoke(
+        app, ["preprocess", "--config", str(config_path), "--dry-run"]
+    )
     assert result.exit_code == 0, result.output
     assert not (dataset_dir / "preprocessed").exists()
 
@@ -61,14 +67,21 @@ def test_synthetic_evaluate_workflow_completes(tmp_path: Path) -> None:
     nib.save(nib.Nifti1Image(reference, affine), reference_path)
     config_path = tmp_path / "evaluate.json"
     output_dir = tmp_path / "report"
-    config_path.write_text(json.dumps({
-        "subjects": [{
-            "subject_id": "synthetic",
-            "prediction_path": str(prediction_path),
-            "reference_path": str(reference_path),
-        }],
-        "output_dir": str(output_dir),
-    }), encoding="utf-8")
+    config_path.write_text(
+        json.dumps(
+            {
+                "subjects": [
+                    {
+                        "subject_id": "synthetic",
+                        "prediction_path": str(prediction_path),
+                        "reference_path": str(reference_path),
+                    }
+                ],
+                "output_dir": str(output_dir),
+            }
+        ),
+        encoding="utf-8",
+    )
 
     result = runner.invoke(app, ["evaluate", "--config", str(config_path)])
     assert result.exit_code == 0, result.output
@@ -95,16 +108,23 @@ def test_evaluate_with_froc_thresholds_writes_sweep(tmp_path: Path) -> None:
     nib.save(nib.Nifti1Image(probability, affine), probability_path)
     config_path = tmp_path / "evaluate.json"
     output_dir = tmp_path / "report"
-    config_path.write_text(json.dumps({
-        "subjects": [{
-            "subject_id": "synthetic",
-            "prediction_path": str(prediction_path),
-            "reference_path": str(reference_path),
-            "probability_path": str(probability_path),
-        }],
-        "output_dir": str(output_dir),
-        "froc_thresholds": [0.5, 0.9],
-    }), encoding="utf-8")
+    config_path.write_text(
+        json.dumps(
+            {
+                "subjects": [
+                    {
+                        "subject_id": "synthetic",
+                        "prediction_path": str(prediction_path),
+                        "reference_path": str(reference_path),
+                        "probability_path": str(probability_path),
+                    }
+                ],
+                "output_dir": str(output_dir),
+                "froc_thresholds": [0.5, 0.9],
+            }
+        ),
+        encoding="utf-8",
+    )
 
     result = runner.invoke(app, ["evaluate", "--config", str(config_path)])
     assert result.exit_code == 0, result.output
@@ -124,15 +144,22 @@ def test_evaluate_froc_requires_probability_paths(tmp_path: Path) -> None:
     nib.save(nib.Nifti1Image(mask, affine), prediction_path)
     nib.save(nib.Nifti1Image(mask, affine), reference_path)
     config_path = tmp_path / "evaluate.json"
-    config_path.write_text(json.dumps({
-        "subjects": [{
-            "subject_id": "synthetic",
-            "prediction_path": str(prediction_path),
-            "reference_path": str(reference_path),
-        }],
-        "output_dir": str(tmp_path / "report"),
-        "froc_thresholds": [0.5],
-    }), encoding="utf-8")
+    config_path.write_text(
+        json.dumps(
+            {
+                "subjects": [
+                    {
+                        "subject_id": "synthetic",
+                        "prediction_path": str(prediction_path),
+                        "reference_path": str(reference_path),
+                    }
+                ],
+                "output_dir": str(tmp_path / "report"),
+                "froc_thresholds": [0.5],
+            }
+        ),
+        encoding="utf-8",
+    )
 
     result = runner.invoke(app, ["evaluate", "--config", str(config_path)])
     assert result.exit_code != 0
@@ -149,15 +176,32 @@ def _train_config_dict(dataset_dir: Path, experiment_dir: Path) -> dict:
     return {
         "dataset_dir": str(dataset_dir),
         "experiment_dir": str(experiment_dir),
-        "detector": {**model_block, "patch_size": 48, "augmentation_factor": 10,
-                     "probability_threshold": 0.0},
+        "detector": {
+            **model_block,
+            "patch_size": 48,
+            "augmentation_factor": 10,
+            "probability_threshold": 0.0,
+        },
         "teacher": {**model_block, "patch_size": 24, "augmentation_factor": 5},
-        "student": {**model_block, "patch_size": 24, "augmentation_factor": 5,
-                    "probability_threshold": 0.0, "temperature": 4.0,
-                    "alpha": 0.4, "beta": 0.6},
-        "trainer": {"learning_rate": 0.001, "adam_epsilon": 0.0001, "batch_size": 8,
-                    "max_epochs": 100, "patience": 20, "learning_rate_factor": 0.1,
-                    "learning_rate_period": 2, "minimum_learning_rate": 0.000001},
+        "student": {
+            **model_block,
+            "patch_size": 24,
+            "augmentation_factor": 5,
+            "probability_threshold": 0.0,
+            "temperature": 4.0,
+            "alpha": 0.4,
+            "beta": 0.6,
+        },
+        "trainer": {
+            "learning_rate": 0.001,
+            "adam_epsilon": 0.0001,
+            "batch_size": 8,
+            "max_epochs": 100,
+            "patience": 20,
+            "learning_rate_factor": 0.1,
+            "learning_rate_period": 2,
+            "minimum_learning_rate": 0.000001,
+        },
     }
 
 
@@ -347,11 +391,21 @@ def test_infer_emits_provenance_before_prediction(tmp_path: Path) -> None:
             "output_dir": str(output_dir),
             "detector_checkpoint": str(tmp_path / "detector.pth"),
             "student_checkpoint": str(tmp_path / "student.pth"),
-            "detector": {**model_block, "patch_size": 48, "augmentation_factor": 10,
-                         "probability_threshold": 0.0},
-            "student": {**model_block, "patch_size": 24, "augmentation_factor": 5,
-                        "probability_threshold": 0.0, "temperature": 4.0,
-                        "alpha": 0.4, "beta": 0.6},
+            "detector": {
+                **model_block,
+                "patch_size": 48,
+                "augmentation_factor": 10,
+                "probability_threshold": 0.0,
+            },
+            "student": {
+                **model_block,
+                "patch_size": 24,
+                "augmentation_factor": 5,
+                "probability_threshold": 0.0,
+                "temperature": 4.0,
+                "alpha": 0.4,
+                "beta": 0.6,
+            },
             "seed": 11,
         }
     )

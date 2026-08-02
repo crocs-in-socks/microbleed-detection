@@ -1,18 +1,18 @@
 import logging
 from pathlib import Path
+from typing import cast
 
 import torch
 import torch.nn as nn
 from torch import optim
-from torch.amp import autocast
-from torch.amp import GradScaler
-from torch.utils.data import DataLoader
+from torch.amp.autocast_mode import autocast
+from torch.amp.grad_scaler import GradScaler
 from torch.nn.utils import clip_grad_norm_
+from torch.utils.data import DataLoader
 
 from microbleednet.core import utils
 from microbleednet.core.common.tasks import BaseTask
 from microbleednet.core.engines.evaluators import Evaluator
-
 
 logger = logging.getLogger(__name__)
 
@@ -57,13 +57,13 @@ class Trainer:
         self.patience = patience
         self.epochs_without_improvement = 0
         self.epoch_records = []
-        
+
         self.checkpoint_dir = checkpoint_dir
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
         if compile_model and hasattr(torch, "compile"):
             logger.info("Compiling model for faster training...")
-            self.model = torch.compile(model)
+            self.model = cast(nn.Module, torch.compile(model))
         else:
             self.model = model
 
@@ -91,7 +91,7 @@ class Trainer:
         self.amp_dtype = torch.float16
         self.scaler = GradScaler(device.type, enabled=self.use_amp)
 
-        self.best_val_loss = float('inf')
+        self.best_val_loss = float("inf")
         self.model = self.model.to(self.device)
 
         self.evaluator = Evaluator(self.model, self.device, self.task)
@@ -101,7 +101,7 @@ class Trainer:
         train_loader: DataLoader,
         val_loader: DataLoader,
         n_epochs: int,
-        checkpoint_path: Path = _DEFAULT_CHECKPOINT_PATH,
+        checkpoint_path: Path | None = _DEFAULT_CHECKPOINT_PATH,
         weights_only: bool = _DEFAULT_WEIGHTS_ONLY,
     ):
         start_epoch = 0
@@ -118,7 +118,14 @@ class Trainer:
             else:
                 self.epochs_without_improvement += 1
 
-            self.epoch_records.append({"epoch": epoch, "train_loss": train_loss, "val_loss": val_loss, "best": is_best})
+            self.epoch_records.append(
+                {
+                    "epoch": epoch,
+                    "train_loss": train_loss,
+                    "val_loss": val_loss,
+                    "best": is_best,
+                }
+            )
             self.save_checkpoint(epoch, is_best)
             if self.epochs_without_improvement >= self.patience:
                 break
@@ -196,12 +203,14 @@ class Trainer:
         self.scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
         self.scaler.load_state_dict(checkpoint["scaler_state_dict"])
         self.best_val_loss = checkpoint["best_val_loss"]
-        self.epochs_without_improvement = checkpoint.get("epochs_without_improvement", 0)
+        self.epochs_without_improvement = checkpoint.get(
+            "epochs_without_improvement", 0
+        )
         self.epoch_records = checkpoint.get("epoch_records", [])
-        
+
         start_epoch = checkpoint.get("epoch", -1) + 1
         logger.info(
             "Successfully restored full state. Resuming from epoch %s.", start_epoch
         )
-        
+
         return start_epoch

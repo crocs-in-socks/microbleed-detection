@@ -1,6 +1,7 @@
 import nibabel as nib
 import numpy as np
 import pytest
+from nibabel.affines import apply_affine
 
 from microbleednet.core.engines.processor import preprocess, restore_to_source
 
@@ -25,20 +26,23 @@ def test_preprocess_round_trip_preserves_source_geometry() -> None:
         False,
         False,
     )
+    assert result.mask is not None
     restored_image = restore_to_source(result.image, result.transform)
     restored_mask = restore_to_source(result.mask, result.transform)
 
     assert restored_image.shape == image.shape
     assert restored_mask.shape == mask.shape
+    assert restored_image.affine is not None
+    assert restored_mask.affine is not None
     assert np.allclose(restored_image.affine, affine)
     assert np.allclose(restored_mask.affine, affine)
     assert np.array_equal(restored_mask.get_fdata(), mask)
 
-    source_world = nib.affines.apply_affine(affine, (2, 3, 1))
+    source_world = apply_affine(affine, (2, 3, 1))
     restored_index = np.unravel_index(
         np.argmax(restored_image.get_fdata()), restored_image.shape
     )
-    restored_world = nib.affines.apply_affine(restored_image.affine, restored_index)
+    restored_world = apply_affine(restored_image.affine, restored_index)
     assert np.allclose(restored_world, source_world)
 
 

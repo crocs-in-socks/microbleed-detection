@@ -1,15 +1,21 @@
 from pathlib import Path
+from typing import cast
 
 import pytest
 import torch
 from torch import nn
+from torch.utils.data import DataLoader
 
 from microbleednet.core import utils
-from microbleednet.core.common.models import CandidateDiscriminatorTeacher, CandidateDetector
+from microbleednet.core.common.models import (
+    CandidateDetector,
+    CandidateDiscriminatorTeacher,
+)
+from microbleednet.core.common.tasks import BaseTask
 from microbleednet.core.engines.trainers import Trainer
 
 
-class EmptyTask:
+class EmptyTask(BaseTask):
     def training_step(self, model, device, batch):
         return torch.tensor(0.0)
 
@@ -46,7 +52,9 @@ def test_missing_checkpoint_is_fatal(tmp_path: Path) -> None:
         utils.load_model_weights(model, torch.device("cpu"), checkpoint_path)
 
 
-def _make_trainer(tmp_path: Path, optimizer_parameters: dict, scheduler_parameters: dict) -> Trainer:
+def _make_trainer(
+    tmp_path: Path, optimizer_parameters: dict, scheduler_parameters: dict
+) -> Trainer:
     return Trainer(
         nn.Linear(2, 2),
         EmptyTask(),
@@ -101,7 +109,7 @@ def test_trainer_scheduler_honors_configured_decay(tmp_path: Path) -> None:
     assert lambda_fn(60) == pytest.approx(0.1)
 
 
-class _TrainableTask:
+class _TrainableTask(BaseTask):
     """Minimal task whose loss is differentiable w.r.t. the model."""
 
     def training_step(self, model, device, batch):
@@ -128,7 +136,11 @@ def test_trainer_fit_honors_max_epochs_beyond_100(tmp_path: Path) -> None:
         def __iter__(self):
             yield {"input": torch.zeros(1, 2), "target": torch.zeros(1)}
 
-    trainer.fit(_OneSampleLoader(), _OneSampleLoader(), n_epochs=105)
+    trainer.fit(
+        cast(DataLoader, _OneSampleLoader()),
+        cast(DataLoader, _OneSampleLoader()),
+        n_epochs=105,
+    )
     assert len(trainer.epoch_records) == 105
     assert trainer.epoch_records[-1]["epoch"] == 104
 
@@ -136,7 +148,9 @@ def test_trainer_fit_honors_max_epochs_beyond_100(tmp_path: Path) -> None:
 def test_detector_initializes_teacher_without_overwriting_classifier() -> None:
     detector = CandidateDetector(2, 2, 2)
     teacher = CandidateDiscriminatorTeacher(2, 2, 2, 0.1)
-    classifier_before = {key: value.clone() for key, value in teacher.classifier.state_dict().items()}
+    classifier_before = {
+        key: value.clone() for key, value in teacher.classifier.state_dict().items()
+    }
     utils.initialize_teacher_from_detector(detector, teacher)
     for key, value in detector.feature_extractor.state_dict().items():
         assert torch.equal(value, teacher.feature_extractor.state_dict()[key])

@@ -20,7 +20,9 @@ def delete_model(model):
         torch.cuda.empty_cache()
 
 
-def collect_patches(subjects: list, subject_patcher: Callable, patcher_parameters: dict):
+def collect_patches(
+    subjects: list, subject_patcher: Callable, patcher_parameters: dict
+):
     patches = []
     for subject in subjects:
         patches.extend(subject_patcher(subject, **patcher_parameters))
@@ -31,7 +33,13 @@ def _load_array(path: str) -> np.ndarray:
     """Load a NIfTI volume at ``path`` and return it as a numpy array."""
     return core_utils.nifti_to_numpy(core_utils.load_volume(Path(path)))
 
-def patch_subject_non_overlapping(subject: PreprocessedSubject, patch_dir: Path, patch_size: int, augmentation_factor: int):
+
+def patch_subject_non_overlapping(
+    subject: PreprocessedSubject,
+    patch_dir: Path,
+    patch_size: int,
+    augmentation_factor: int,
+):
     subject_id = subject.subject_id
     if subject.mask_path is None:
         raise ValueError(f"training subject has no mask: {subject_id}")
@@ -40,12 +48,22 @@ def patch_subject_non_overlapping(subject: PreprocessedSubject, patch_dir: Path,
     mask = _load_array(subject.mask_path)
 
     patches = core_patchers.nonoverlapping_patcher(volume, mask, patch_size)
-    patches = core_patchers.materialize_patches(patches, patch_dir, subject_id, augmentation_factor)
+    patches = core_patchers.materialize_patches(
+        patches, patch_dir, subject_id, augmentation_factor
+    )
 
     return patches
 
 
-def patch_subject_target_centered(subject: PreprocessedSubject, patch_dir: Path, patch_size: int, augmentation_factor: int, model: CandidateDetector, device: torch.device, threshold: float):
+def patch_subject_target_centered(
+    subject: PreprocessedSubject,
+    patch_dir: Path,
+    patch_size: int,
+    augmentation_factor: int,
+    model: CandidateDetector,
+    device: torch.device,
+    threshold: float,
+):
     subject_id = subject.subject_id
     if subject.mask_path is None:
         raise ValueError(f"training subject has no mask: {subject_id}")
@@ -60,10 +78,14 @@ def patch_subject_target_centered(subject: PreprocessedSubject, patch_dir: Path,
         candidate_mask, output
     )
 
-    patches = core_patchers.target_centered_patcher(volume, mask, candidate_mask, patch_size)
+    patches = core_patchers.target_centered_patcher(
+        volume, mask, candidate_mask, patch_size
+    )
     for patch_data in patches:
         candidate_id = patch_data["candidate_id"]
         patch_data["candidate_probability"] = candidate_probabilities[candidate_id]
-    patches = core_patchers.materialize_patches(patches, patch_dir, subject_id, augmentation_factor)
+    patches = core_patchers.materialize_patches(
+        patches, patch_dir, subject_id, augmentation_factor
+    )
 
     return patches

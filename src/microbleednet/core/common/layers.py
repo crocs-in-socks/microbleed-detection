@@ -12,7 +12,11 @@ class SingleConv(nn.Module):
     _DEFAULT_PADDING = 1
 
     def __init__(
-        self, in_channels: int, out_channels: int, kernel_size: int, padding: int = _DEFAULT_PADDING
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int,
+        padding: int = _DEFAULT_PADDING,
     ):
         super().__init__()
         self.layer = nn.Sequential(
@@ -79,11 +83,15 @@ class DownConv(nn.Module):
 
 class UpConv(nn.Module):
     """
-    convolution transpose (upsampling) -> concatenation with skip connection -> (convolution -> batch-normalization -> relu) twice
+    convolution transpose (upsampling) -> concatenation with skip connection ->
+    (convolution -> batch-normalization -> relu) twice
     """
+
     def __init__(self, in_channels: int, out_channels: int, kernel_size: int):
         super().__init__()
-        self.upsample = nn.ConvTranspose3d(in_channels, in_channels // 2, kernel_size, stride=2)
+        self.upsample = nn.ConvTranspose3d(
+            in_channels, in_channels // 2, kernel_size, stride=2
+        )
         self.conv = DoubleConv(in_channels, out_channels, 3, 1)
 
     def forward(self, x1: torch.Tensor, x2: torch.Tensor) -> torch.Tensor:
@@ -118,6 +126,7 @@ class OutConv(nn.Module):
     """
     convolution with kernel_size=1
     """
+
     def __init__(self, in_channels: int, out_channels: int):
         super().__init__()
         self.layer = nn.Conv3d(in_channels, out_channels, kernel_size=1)

@@ -1,17 +1,12 @@
+from typing import cast
+
 import numpy as np
-from skimage.measure import label
+from joblib import Parallel, delayed
+from scipy.ndimage import binary_dilation, convolve
+from skimage.feature import structure_tensor, structure_tensor_eigenvalues
 from skimage.filters import frangi
-from scipy.ndimage import convolve
+from skimage.measure import label, regionprops
 from sklearn.cluster import KMeans
-from skimage.measure import regionprops
-from scipy.ndimage import binary_dilation
-from skimage.feature import structure_tensor
-from skimage.feature import structure_tensor_eigenvalues
-
-from joblib import delayed
-from joblib import Parallel
-
-from .. import utils
 
 # Frangi vesselness filter parameters (see skimage.filters.frangi). Structural
 # tuning of the vessel detector; not exposed through the config models.
@@ -65,7 +60,7 @@ def get_slice_vessel_mask(image_slice: np.ndarray) -> np.ndarray:
 
     frangi_slice = frangi(
         image_slice,
-        sigmas=_FRANGI_SIGMAS,
+        sigmas=_FRANGI_SIGMAS,  # type: ignore[arg-type]
         alpha=_FRANGI_ALPHA,
         beta=_FRANGI_BETA,
         black_ridges=_FRANGI_BLACK_RIDGES,
@@ -85,11 +80,12 @@ def get_slice_vessel_mask(image_slice: np.ndarray) -> np.ndarray:
     ).fit(slice_features)
     clusters = clusterer.labels_
 
-    # Assuming that the number of pixels in vessels is less than other pixels, we label clusters
+    # Assuming that the number of pixels in vessels is less than other pixels,
+    # we label clusters
     vessel_cluster_label = 1 if (clusters == 1).sum() < (clusters == 0).sum() else 0
 
-    vessel_mask = np.reshape(clusters == vessel_cluster_label, slice.shape)
-    vessel_mask = label(vessel_mask)
+    vessel_mask = np.reshape(clusters == vessel_cluster_label, image_slice.shape)
+    vessel_mask = cast(np.ndarray, label(vessel_mask))
     vessel_mask_props = regionprops(vessel_mask)
 
     valid_vessel_regions = [
@@ -100,9 +96,10 @@ def get_slice_vessel_mask(image_slice: np.ndarray) -> np.ndarray:
             and prop.solidity > _MAXIMUM_VESSEL_SOLIDITY
         )
     ]
-    
+
     vessel_mask = np.isin(vessel_mask, valid_vessel_regions).astype(int)
     return vessel_mask
+
 
 def get_linearity_measure(slice: np.ndarray) -> np.ndarray:
 
@@ -128,12 +125,17 @@ def inpaint_with_neighborhood_mean(volume: np.ndarray, mask: np.ndarray) -> np.n
         previous_mask_sum = working_mask.sum()
         valid_mask = (1 - working_mask).astype(int)
 
-        neighbour_sum = convolve(inpainted_volume * valid_mask, kernel, mode="constant", cval=0)
+        neighbour_sum = convolve(
+            inpainted_volume * valid_mask, kernel, mode="constant", cval=0
+        )
         neighbour_count = convolve(valid_mask, kernel, mode="constant", cval=0)
 
-        # Identify voxels that are BOTH currently masked AND have at least one valid neighbor
+        # Identify voxels that are BOTH currently masked AND have at least one
+        # valid neighbor
         update_mask = working_mask & (neighbour_count > 0)
-        inpainted_volume[update_mask] = (neighbour_sum[update_mask] / neighbour_count[update_mask])
+        inpainted_volume[update_mask] = (
+            neighbour_sum[update_mask] / neighbour_count[update_mask]
+        )
 
         working_mask[update_mask] = False
         resolved_voxels = previous_mask_sum - working_mask.sum()
