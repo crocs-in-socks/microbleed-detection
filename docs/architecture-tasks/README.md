@@ -39,6 +39,11 @@ Ask for a slice by number. When implementing one, I will:
 Lower numbers are lower risk and have fewer dependencies. This is a recommended
 order, not a hard requirement; each slice states its own dependencies.
 
+For the remaining gaps not yet covered by a numbered slice — typed manifests,
+atomic-writer consolidation, trainer config-hardcoding, FROC/postprocessing
+wiring decisions, dead-code removal, and duplication cleanup — see the
+[architecture alignment audit](AUDIT.md).
+
 | #  | Slice                                             | Risk   | Depends on | Status |
 | -- | ------------------------------------------------- | ------ | ---------- | ------ |
 | 01 | Rename `predict` → `infer`                        | low    | —          | done   |
@@ -49,7 +54,7 @@ order, not a hard requirement; each slice states its own dependencies.
 | 05 | Remove constants drift (aug + distillation)       | medium | 10         | done   |
 | 06 | Dissolve remaining constants files into models    | medium | 05         | done   |
 | 07 | Isolate optional / heavy dependencies             | low    | —          | done   |
-| 08 | Replace loose dicts at layer boundaries           | high   | 10         | in progress (infer result → PredictionSummary; evaluate report + patcher_parameters remain) |
+| 08 | Replace loose dicts at layer boundaries           | high   | 10         | in progress (infer result → PredictionSummary; remainder tracked as A10 in [AUDIT.md](AUDIT.md)) |
 | 09 | Provenance as a first-class output                | medium | —          | done (typed record + train emission wiring) |
 | 11 | Typed config for the `train` command              | high   | 10         | done   |
 
