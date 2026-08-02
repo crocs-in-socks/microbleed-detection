@@ -9,7 +9,6 @@ from torch.amp import GradScaler
 from torch.utils.data import DataLoader
 from torch.nn.utils import clip_grad_norm_
 
-from .. import constants
 from microbleednet.core import utils
 from microbleednet.core.common.tasks import BaseTask
 from microbleednet.core.engines.evaluators import Evaluator
@@ -17,8 +16,20 @@ from microbleednet.core.engines.evaluators import Evaluator
 
 logger = logging.getLogger(__name__)
 
+# Behavioral defaults for training and checkpoint loading. Module-level because
+# they are used as default argument values, which bind at def-time before the
+# Trainer class exists.
+_DEFAULT_COMPILE_MODEL = True
+_DEFAULT_CLIP_NORM = 1.0
+_DEFAULT_CHECKPOINT_PATH = None
+_DEFAULT_WEIGHTS_ONLY = False
+
 
 class Trainer:
+    # Checkpoint filenames written under the stage's checkpoint directory.
+    LATEST_CHECKPOINT_PATH = Path("latest_model.pth")
+    BEST_CHECKPOINT_PATH = Path("best_model.pth")
+
     def __init__(
         self,
         model: nn.Module,
@@ -27,7 +38,7 @@ class Trainer:
         optimizer_parameters: dict,
         scheduler_parameters: dict,
         checkpoint_dir: Path,
-        compile_model: bool = constants.engines.trainers.default.compile_model,
+        compile_model: bool = _DEFAULT_COMPILE_MODEL,
         stage: str = "training",
         model_config: dict | None = None,
         provenance: dict | None = None,
@@ -58,7 +69,7 @@ class Trainer:
 
         optimizer_parameters = dict(optimizer_parameters)
         optimizer_parameters["lr"] = 1e-3
-        self.clip_norm = optimizer_parameters.pop("clip_norm", constants.engines.trainers.default.clip_norm)
+        self.clip_norm = optimizer_parameters.pop("clip_norm", _DEFAULT_CLIP_NORM)
         self.optimizer = optim.Adam(self.model.parameters(), **optimizer_parameters)
         self.scheduler = optim.lr_scheduler.LambdaLR(
             self.optimizer,
@@ -81,8 +92,8 @@ class Trainer:
         train_loader: DataLoader,
         val_loader: DataLoader,
         n_epochs: int,
-        checkpoint_path: Path = constants.engines.trainers.default.checkpoint_path,
-        weights_only: bool = constants.engines.trainers.default.weights_only,
+        checkpoint_path: Path = _DEFAULT_CHECKPOINT_PATH,
+        weights_only: bool = _DEFAULT_WEIGHTS_ONLY,
     ):
         start_epoch = 0
         if checkpoint_path:
@@ -157,11 +168,11 @@ class Trainer:
             "epoch_records": self.epoch_records,
         }
 
-        latest_path = self.checkpoint_dir / constants.engines.trainers.latest_checkpoint_path
+        latest_path = self.checkpoint_dir / self.LATEST_CHECKPOINT_PATH
         torch.save(state, latest_path)
 
         if is_best:
-            best_path = self.checkpoint_dir / constants.engines.trainers.best_checkpoint_path
+            best_path = self.checkpoint_dir / self.BEST_CHECKPOINT_PATH
             torch.save(state, best_path)
 
     def load_checkpoint(self, checkpoint_path: Path, weights_only: bool) -> int:

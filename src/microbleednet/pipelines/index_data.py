@@ -9,6 +9,10 @@ from natsort import natsorted
 from ..core import utils
 from . import constants
 
+# Token that a volume/mask filename pattern must contain exactly once; the text
+# it matches becomes the subject ID.
+_SUBJECT_ID_PLACEHOLDER = "{subject_id}"
+
 
 def execute(
     input_dir: Path,
@@ -83,7 +87,7 @@ def execute(
 
 
 def validate_pattern(pattern: str) -> None:
-    placeholder = constants.index_data.subject_id_placeholder
+    placeholder = _SUBJECT_ID_PLACEHOLDER
     if pattern.count(placeholder) != 1:
         raise ValueError(
             "pattern must contain exactly one '{subject_id}' placeholder"
@@ -108,7 +112,7 @@ def _build_subject_map(
 
 def compute_paths(dir: Path, pattern: str) -> list[Path]:
     validate_pattern(pattern)
-    pattern_parts = pattern.split(constants.index_data.subject_id_placeholder)
+    pattern_parts = pattern.split(_SUBJECT_ID_PLACEHOLDER)
     glob_pattern = "*".join(glob.escape(part) for part in pattern_parts)
     return natsorted(dir.rglob(glob_pattern))
 
@@ -128,7 +132,7 @@ def extract_subject_id(root_dir: Path, path: Path, pattern: str) -> Optional[str
     validate_pattern(pattern)
     clean_path = path.relative_to(root_dir)
 
-    pattern_parts = pattern.split(constants.index_data.subject_id_placeholder)
+    pattern_parts = pattern.split(_SUBJECT_ID_PLACEHOLDER)
     escaped_parts = [re.escape(part) for part in pattern_parts]
     regex_pattern = "^" + "(.*?)".join(escaped_parts) + "$"
     match = re.match(regex_pattern, str(clean_path))

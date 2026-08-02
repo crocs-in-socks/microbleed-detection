@@ -11,8 +11,21 @@ from skimage.feature import structure_tensor_eigenvalues
 from joblib import delayed
 from joblib import Parallel
 
-from .. import constants
 from .. import utils
+
+# Frangi vesselness filter parameters (see skimage.filters.frangi). Structural
+# tuning of the vessel detector; not exposed through the config models.
+_FRANGI_SIGMAS = (0.5, 1.2, 0.2)
+_FRANGI_ALPHA = 0.9
+_FRANGI_BETA = 20
+_FRANGI_BLACK_RIDGES = False
+
+# KMeans clustering + region filtering that turn the vesselness map into a mask.
+_CLUSTERER_N_CLUSTERS = 2
+_CLUSTERER_RANDOM_STATE = 42
+_MINIMUM_VESSEL_ECCENTRICITY = 0.9
+_MAXIMUM_VESSEL_SOLIDITY = 0.5
+
 
 def apply(volume: np.ndarray) -> np.ndarray:
     """
@@ -52,10 +65,10 @@ def get_slice_vessel_mask(image_slice: np.ndarray) -> np.ndarray:
 
     frangi_slice = frangi(
         image_slice,
-        sigmas=constants.transforms.frangi.sigmas,
-        alpha=constants.transforms.frangi.alpha,
-        beta=constants.transforms.frangi.beta,
-        black_ridges=constants.transforms.frangi.black_ridges,
+        sigmas=_FRANGI_SIGMAS,
+        alpha=_FRANGI_ALPHA,
+        beta=_FRANGI_BETA,
+        black_ridges=_FRANGI_BLACK_RIDGES,
     )
     frangi_slice = frangi_slice * brain_mask
 
@@ -67,8 +80,8 @@ def get_slice_vessel_mask(image_slice: np.ndarray) -> np.ndarray:
 
     slice_features = np.stack([frangi_slice.ravel(), linearity.ravel()], axis=1)
     clusterer = KMeans(
-        n_clusters=constants.transforms.vessel_inpainting.clusterer_n_clusters,
-        random_state=constants.transforms.vessel_inpainting.clusterer_random_state,
+        n_clusters=_CLUSTERER_N_CLUSTERS,
+        random_state=_CLUSTERER_RANDOM_STATE,
     ).fit(slice_features)
     clusters = clusterer.labels_
 
@@ -83,8 +96,8 @@ def get_slice_vessel_mask(image_slice: np.ndarray) -> np.ndarray:
         prop.label
         for prop in vessel_mask_props
         if not (
-            prop.eccentricity < constants.transforms.vessel_inpainting.minimum_vessel_eccentricity
-            and prop.solidity > constants.transforms.vessel_inpainting.maximum_vessel_solidity
+            prop.eccentricity < _MINIMUM_VESSEL_ECCENTRICITY
+            and prop.solidity > _MAXIMUM_VESSEL_SOLIDITY
         )
     ]
     

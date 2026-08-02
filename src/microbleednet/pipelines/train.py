@@ -16,7 +16,6 @@ from ..config import (
     TrainCommandConfig,
     TrainerConfig,
 )
-from ..core import constants as core_constants
 from ..core import utils as core_utils
 from ..core.common.models import (
     CandidateDetector,
@@ -68,9 +67,11 @@ class _StageRuntime:
 def _stage_runtime(
     experiment_dir: Path, device: torch.device, stage: str
 ) -> _StageRuntime:
+    from ..core.engines.trainers import Trainer
+
     stage_root = experiment_dir / "train" / stage
     checkpoint_dir = stage_root / "checkpoints"
-    best_checkpoint_name = core_constants.engines.trainers.best_checkpoint_path
+    best_checkpoint_name = Trainer.BEST_CHECKPOINT_PATH
     return _StageRuntime(
         stage=stage,
         device=device,
@@ -111,10 +112,11 @@ def _write_stage_manifest(path: Path, stage: str, status: str, **details) -> Non
 
 
 def _optimizer_parameters(trainer_config: TrainerConfig) -> dict:
+    # clip_norm is intentionally omitted: Trainer applies its own gradient
+    # clipping default, which is the value this used to pass explicitly.
     return {
         "lr": trainer_config.learning_rate,
         "eps": trainer_config.adam_epsilon,
-        "clip_norm": core_constants.engines.trainers.default.clip_norm,
     }
 
 

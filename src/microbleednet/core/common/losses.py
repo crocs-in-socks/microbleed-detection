@@ -2,11 +2,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .. import constants
+# Laplace smoothing added to the Dice numerator and denominator to keep the
+# coefficient finite when a patch has no foreground voxels.
+_DEFAULT_DICE_SMOOTH = 1.0
 
 
 class DiceLoss(nn.Module):
-    def __init__(self, smooth: float = constants.common.losses.dice.default.smooth):
+    def __init__(self, smooth: float = _DEFAULT_DICE_SMOOTH):
         super().__init__()
         self.smooth = smooth
 
@@ -35,7 +37,7 @@ class KnowledgeDistillationLoss(nn.Module):
     
 
 class DetectorLoss(nn.Module):
-    def __init__(self, dice_smooth=constants.common.losses.dice.default.smooth):
+    def __init__(self, dice_smooth=_DEFAULT_DICE_SMOOTH):
         super().__init__()
         self.dice_loss = DiceLoss(smooth=dice_smooth)
         self.register_buffer("class_weights", torch.tensor([1.0, 10.0]))
@@ -61,7 +63,7 @@ class DiscriminatorTeacherLoss(nn.Module):
     """
     dice loss + weighted voxel-wise cross entropy loss + binary cross entropy
     """
-    def __init__(self, dice_smooth=constants.common.losses.dice.default.smooth):
+    def __init__(self, dice_smooth=_DEFAULT_DICE_SMOOTH):
         super().__init__()
         self.segmentation_loss = DetectorLoss(dice_smooth)
         self.classification_loss = nn.CrossEntropyLoss()
