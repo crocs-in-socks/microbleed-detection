@@ -5,18 +5,20 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from skimage.measure import regionprops
+from skimage.measure import label, regionprops
 
 from .. import provenance, storage
 from ..config import (
     DetectorConfig,
     InferCommandConfig,
+    PostprocessingConfig,
     PreprocessingConfig,
     StudentConfig,
 )
 from ..core import utils
 from ..core.common.models import CandidateDetector, CandidateDiscriminatorStudent
 from ..core.engines import processor
+from ..core.postprocessing.filters import filter_components
 from ..core.transforms import frst
 from ..core.transforms.patch import extract_centered_patch
 from ..records import PredictionSummary
@@ -75,6 +77,41 @@ def _student_probabilities(student, patches: list[np.ndarray], device: torch.dev
     return np.concatenate(probabilities)
 
 
+def _apply_postprocessing(
+    component_mask: np.ndarray,
+    probability_map: np.ndarray,
+    brain_mask: np.ndarray,
+    spacing: tuple[float, float, float],
+    postprocessing: PostprocessingConfig,
+    subject_id: str,
+) -> tuple[np.ndarray, np.ndarray, list[dict]]:
+    """Morphologically filter the student-accepted mask before it is written.
+
+    Rejected components are removed from both the mask and the probability map so
+    the written outputs reflect only accepted lesions. The per-component filter
+    verdicts (volume, eccentricity, boundary distance) are returned for the
+    record so a reader can audit why any candidate was dropped.
+    """
+    filtered = filter_components(
+        component_mask,
+        spacing,
+        brain_mask,
+        minimum_volume_mm3=postprocessing.minimum_volume_mm3,
+        maximum_eccentricity=postprocessing.maximum_eccentricity,
+        minimum_boundary_distance_voxels=postprocessing.minimum_boundary_distance_voxels,
+        source_subject=subject_id,
+    )
+    component_labels = label(component_mask > 0, connectivity=3)
+    accepted_mask = np.zeros_like(component_mask)
+    for component in filtered:
+        if component["accepted"]:
+            accepted_mask[component_labels == component["component_id"]] = 1
+    accepted_probability = np.where(accepted_mask > 0, probability_map, 0.0).astype(
+        probability_map.dtype
+    )
+    return accepted_mask, accepted_probability, filtered
+
+
 def predict_volume(
     volume_path: Path,
     output_dir: Path,
@@ -86,6 +123,7 @@ def predict_volume(
     device: torch.device = torch.device("cpu"),
     patch_batch_size: int = 8,
     subject_id: str | None = None,
+    postprocessing: PostprocessingConfig | None = None,
 ) -> PredictionSummary:
     if patch_batch_size <= 0:
         raise ValueError("patch_batch_size must be positive")
@@ -125,6 +163,28 @@ def predict_volume(
             component_mask[candidate_labels == candidate_id] = 1
             probability_map[candidate_labels == candidate_id] = student_probability
 
+    if postprocessing is not None:
+        # The extracted-brain support is the brain mask for boundary distance.
+        brain_mask = (processed.image != 0).astype(np.uint8)
+        component_mask, probability_map, _ = _apply_postprocessing(
+            component_mask,
+            probability_map,
+            brain_mask,
+            processed.geometry.spacing,
+            postprocessing,
+            subject_id,
+        )
+        # A candidate survives postprocessing iff its voxels remain in the final
+        # accepted mask. Recording this per candidate keeps the components file
+        # the single audit trail: student-accepted candidates dropped by the
+        # morphological filter are flagged here.
+        for record in candidate_records:
+            candidate_voxels = candidate_labels == record["candidate_id"]
+            student_accepted = record.get("accepted", False)
+            record["postprocessing_accepted"] = bool(
+                student_accepted and np.any(component_mask[candidate_voxels])
+            )
+
     output_dir.mkdir(parents=True, exist_ok=True)
     mask_image = processor.restore_to_source(component_mask, processed.transform)
     probability_image = processor.restore_to_source(probability_map, processed.transform)
@@ -137,6 +197,8 @@ def predict_volume(
     csv_fieldnames = [
         "candidate_id", "detector_probability", "student_probability", "accepted"
     ]
+    if postprocessing is not None:
+        csv_fieldnames.append("postprocessing_accepted")
     csv_buffer = io.StringIO()
     csv_writer = csv.DictWriter(csv_buffer, fieldnames=csv_fieldnames)
     csv_writer.writeheader()
@@ -177,4 +239,5 @@ def execute(config: InferCommandConfig) -> PredictionSummary:
         device=device,
         patch_batch_size=config.patch_batch_size,
         subject_id=config.subject_id,
+        postprocessing=config.postprocessing,
     )

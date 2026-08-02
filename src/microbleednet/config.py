@@ -477,3 +477,10 @@ class InferCommandConfig(FrozenConfig):
         default=None,
         description="Identifier for outputs; defaults to the volume filename stem.",
     )
+    postprocessing: PostprocessingConfig | None = Field(
+        default=None,
+        description=(
+            "Morphological candidate filtering applied to the student-accepted "
+            "mask before it is written. Omit to write the raw accepted mask."
+        ),
+    )

@@ -382,6 +382,43 @@ def test_infer_emits_provenance_before_prediction(tmp_path: Path) -> None:
     assert record["configuration"] == settings.model_dump(mode="json")
 
 
+def test_apply_postprocessing_drops_subthreshold_components() -> None:
+    from microbleednet.config import PostprocessingConfig
+    from microbleednet.pipelines.infer import _apply_postprocessing
+
+    # A compact cube (large volume, low eccentricity) survives; a single stray
+    # voxel is dropped for being under the minimum volume.
+    component_mask = np.zeros((12, 12, 12), dtype=np.uint8)
+    component_mask[2:6, 2:6, 2:6] = 1
+    component_mask[9, 9, 9] = 1
+    probability_map = np.where(component_mask > 0, 0.8, 0.0).astype(np.float32)
+    brain_mask = np.ones_like(component_mask)
+    postprocessing = PostprocessingConfig(
+        minimum_volume_mm3=2.5,
+        maximum_eccentricity=1.0,
+        minimum_boundary_distance_voxels=0.0,
+    )
+
+    accepted_mask, accepted_probability, filtered = _apply_postprocessing(
+        component_mask,
+        probability_map,
+        brain_mask,
+        spacing=(1.0, 1.0, 1.0),
+        postprocessing=postprocessing,
+        subject_id="synthetic",
+    )
+
+    # The cube (64 voxels) survives; the single voxel does not.
+    assert accepted_mask[3, 3, 3] == 1
+    assert accepted_mask[9, 9, 9] == 0
+    assert accepted_probability[9, 9, 9] == 0.0
+    reasons = {
+        component["component_id"]: component["rejection_reasons"]
+        for component in filtered
+    }
+    assert any("volume" in value for value in reasons.values())
+
+
 def test_write_provenance_captures_config_and_seed(tmp_path: Path) -> None:
     import torch
 
