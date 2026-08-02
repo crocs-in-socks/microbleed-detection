@@ -143,6 +143,7 @@ def _scheduler_parameters(trainer_config: TrainerConfig) -> dict:
     return {
         "gamma": trainer_config.learning_rate_factor,
         "step_size": trainer_config.learning_rate_period,
+        "minimum_learning_rate": trainer_config.minimum_learning_rate,
     }
 
 
