@@ -1,4 +1,5 @@
 import csv
+import io
 import json
 from pathlib import Path
 
@@ -129,13 +130,19 @@ def predict_volume(
     utils.save_volume(mask_image, mask_path)
     utils.save_volume(probability_image, probability_path)
     record_path = output_dir / f"{subject_id}_components.json"
-    storage.write_json_atomic(record_path, {"subject_id": subject_id, "components": candidate_records})
     csv_path = output_dir / f"{subject_id}_components.csv"
-    with csv_path.open("w", newline="", encoding="utf-8") as csv_file:
-        writer = csv.DictWriter(csv_file, fieldnames=["candidate_id", "detector_probability", "student_probability", "accepted"])
-        writer.writeheader()
-        for record in candidate_records:
-            writer.writerow({key: record.get(key) for key in writer.fieldnames})
+    csv_fieldnames = [
+        "candidate_id", "detector_probability", "student_probability", "accepted"
+    ]
+    csv_buffer = io.StringIO()
+    csv_writer = csv.DictWriter(csv_buffer, fieldnames=csv_fieldnames)
+    csv_writer.writeheader()
+    for record in candidate_records:
+        csv_writer.writerow({key: record.get(key) for key in csv_fieldnames})
+    # Publish the component JSON first, then the CSV report last.
+    components_payload = {"subject_id": subject_id, "components": candidate_records}
+    storage.write_json_atomic(record_path, components_payload)
+    storage.write_text_atomic(csv_path, csv_buffer.getvalue())
     return PredictionSummary(
         subject_id=subject_id,
         mask_path=mask_path,

@@ -1,11 +1,11 @@
 from pathlib import Path
 import hashlib
-import json
 import os
 import tempfile
 
 import numpy as np
 
+from microbleednet import storage
 from microbleednet.core.transforms import patch
 
 # No augmentation multiplier unless a caller asks for one.
@@ -86,9 +86,6 @@ def materialize_patches(
         manifest.append(record)
 
     manifest_path = patch_dir / f"manifest_{volume_identifier}.json"
-    with tempfile.NamedTemporaryFile("w", dir=patch_dir, suffix=".json", delete=False) as temporary_file:
-        json.dump(manifest, temporary_file, indent=2)
-        temporary_manifest = Path(temporary_file.name)
-    os.replace(temporary_manifest, manifest_path)
+    storage.write_json_atomic(manifest_path, manifest)
 
     return patch_metadata
