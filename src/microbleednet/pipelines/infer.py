@@ -1,0 +1,272 @@
+import csv
+import io
+from pathlib import Path
+
+import numpy as np
+import torch
+from skimage.measure import label, regionprops
+
+from .. import provenance, storage
+from ..config import (
+    DetectorConfig,
+    InferCommandConfig,
+    PostprocessingConfig,
+    PreprocessingConfig,
+    StudentConfig,
+)
+from ..core import utils
+from ..core.common.models import CandidateDetector, CandidateDiscriminatorStudent
+from ..core.engines import processor
+from ..core.postprocessing.filters import filter_components
+from ..core.transforms import frst
+from ..core.transforms.patch import extract_centered_patch
+from ..records import PredictionSummary
+
+
+def _load_models(
+    detector_config: DetectorConfig,
+    student_config: StudentConfig,
+    detector_checkpoint: Path,
+    student_checkpoint: Path,
+    device: torch.device,
+):
+    detector = CandidateDetector(
+        input_channels=detector_config.input_channels,
+        output_classes=detector_config.output_classes,
+        initial_channels=detector_config.initial_channels,
+    )
+    student = CandidateDiscriminatorStudent(
+        input_channels=student_config.input_channels,
+        output_classes=student_config.output_classes,
+        initial_channels=student_config.initial_channels,
+        dropout_rate=student_config.dropout_rate,
+    )
+    utils.load_model_weights(detector, device, detector_checkpoint)
+    utils.load_model_weights(student, device, student_checkpoint)
+    return detector.to(device).eval(), student.to(device).eval()
+
+
+def _candidate_records(
+    candidate_mask: np.ndarray, probability: np.ndarray, subject_id: str
+) -> tuple[list[dict], np.ndarray]:
+    candidates, regions, mean_probabilities = processor.label_candidates(
+        candidate_mask, probability
+    )
+    records = []
+    for region in regions:
+        records.append(
+            {
+                "candidate_id": int(region.label),
+                "source_subject": subject_id,
+                "voxel_count": int(region.area),
+                "centroid": [float(value) for value in region.centroid],
+                "bounding_box": [
+                    [int(region.bbox[index]), int(region.bbox[index + 3])]
+                    for index in range(3)
+                ],
+                "detector_probability": mean_probabilities[region.label],
+            }
+        )
+    return records, candidates
+
+
+def _student_probabilities(
+    student, patches: list[np.ndarray], device: torch.device, batch_size: int
+) -> np.ndarray:
+    if not patches:
+        return np.empty(0, dtype=np.float32)
+    probabilities = []
+    with torch.no_grad():
+        for start in range(0, len(patches), batch_size):
+            batch = (
+                torch.from_numpy(np.stack(patches[start : start + batch_size]))
+                .float()
+                .unsqueeze(1)
+                .to(device)
+            )
+            batch = frst.prepend_frst_channel(batch)
+            logits = student(batch)
+            probabilities.append(processor.positive_class_probability(logits))
+    return np.concatenate(probabilities)
+
+
+def _apply_postprocessing(
+    component_mask: np.ndarray,
+    probability_map: np.ndarray,
+    brain_mask: np.ndarray,
+    spacing: tuple[float, float, float],
+    postprocessing: PostprocessingConfig,
+    subject_id: str,
+) -> tuple[np.ndarray, np.ndarray, list[dict]]:
+    """Morphologically filter the student-accepted mask before it is written.
+
+    Rejected components are removed from both the mask and the probability map so
+    the written outputs reflect only accepted lesions. The per-component filter
+    verdicts (volume, eccentricity, boundary distance) are returned for the
+    record so a reader can audit why any candidate was dropped.
+    """
+    filtered = filter_components(
+        component_mask,
+        spacing,
+        brain_mask,
+        minimum_volume_mm3=postprocessing.minimum_volume_mm3,
+        maximum_eccentricity=postprocessing.maximum_eccentricity,
+        minimum_boundary_distance_voxels=postprocessing.minimum_boundary_distance_voxels,
+        source_subject=subject_id,
+    )
+    component_labels = label(component_mask > 0, connectivity=3)
+    accepted_mask = np.zeros_like(component_mask)
+    for component in filtered:
+        if component["accepted"]:
+            accepted_mask[component_labels == component["component_id"]] = 1
+    accepted_probability = np.where(accepted_mask > 0, probability_map, 0.0).astype(
+        probability_map.dtype
+    )
+    return accepted_mask, accepted_probability, filtered
+
+
+def predict_volume(
+    volume_path: Path,
+    output_dir: Path,
+    detector_config: DetectorConfig,
+    student_config: StudentConfig,
+    detector_checkpoint: Path,
+    student_checkpoint: Path,
+    preprocessing: PreprocessingConfig,
+    device: torch.device = torch.device("cpu"),
+    patch_batch_size: int = 8,
+    subject_id: str | None = None,
+    postprocessing: PostprocessingConfig | None = None,
+) -> PredictionSummary:
+    if patch_batch_size <= 0:
+        raise ValueError("patch_batch_size must be positive")
+    detector_threshold = detector_config.probability_threshold
+    student_threshold = student_config.probability_threshold
+    subject_id = subject_id or Path(volume_path).name.split(".")[0]
+    image = utils.load_volume(volume_path)
+    processed = processor.preprocess(image, None, **preprocessing.model_dump())
+    detector, student = _load_models(
+        detector_config, student_config, detector_checkpoint, student_checkpoint, device
+    )
+
+    detector_logits = processor.infer(detector, device, processed.image)
+    detector_probability = processor.positive_class_probability(detector_logits)[0]
+    candidate_mask = detector_probability >= detector_threshold
+    candidate_records, candidate_labels = _candidate_records(
+        candidate_mask, detector_probability, subject_id
+    )
+    candidate_patch_size = student_config.patch_size
+    patch_records = []
+    patches = []
+    for region in regionprops(candidate_labels):
+        centroid = region.centroid
+        center = (
+            int(round(centroid[0])),
+            int(round(centroid[1])),
+            int(round(centroid[2])),
+        )
+        patch, bounds = extract_centered_patch(
+            processed.image, center, candidate_patch_size
+        )
+        patches.append(patch)
+        patch_records.append((int(region.label), bounds))
+
+    student_probabilities = _student_probabilities(
+        student, patches, device, patch_batch_size
+    )
+    component_mask = np.zeros(processed.image.shape, dtype=np.uint8)
+    probability_map = np.zeros(processed.image.shape, dtype=np.float32)
+    by_id = {record["candidate_id"]: record for record in candidate_records}
+    for (candidate_id, bounds), student_probability in zip(
+        patch_records, student_probabilities
+    ):
+        record = by_id[candidate_id]
+        record["student_probability"] = float(student_probability)
+        record["accepted"] = bool(student_probability >= student_threshold)
+        if record["accepted"]:
+            component_mask[candidate_labels == candidate_id] = 1
+            probability_map[candidate_labels == candidate_id] = student_probability
+
+    if postprocessing is not None:
+        # The extracted-brain support is the brain mask for boundary distance.
+        brain_mask = (processed.image != 0).astype(np.uint8)
+        component_mask, probability_map, _ = _apply_postprocessing(
+            component_mask,
+            probability_map,
+            brain_mask,
+            processed.geometry.spacing,
+            postprocessing,
+            subject_id,
+        )
+        # A candidate survives postprocessing iff its voxels remain in the final
+        # accepted mask. Recording this per candidate keeps the components file
+        # the single audit trail: student-accepted candidates dropped by the
+        # morphological filter are flagged here.
+        for record in candidate_records:
+            candidate_voxels = candidate_labels == record["candidate_id"]
+            student_accepted = record.get("accepted", False)
+            record["postprocessing_accepted"] = bool(
+                student_accepted and np.any(component_mask[candidate_voxels])
+            )
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    mask_image = processor.restore_to_source(component_mask, processed.transform)
+    probability_image = processor.restore_to_source(
+        probability_map, processed.transform
+    )
+    mask_path = output_dir / f"{subject_id}_prediction.nii.gz"
+    probability_path = output_dir / f"{subject_id}_probability.nii.gz"
+    utils.save_volume(mask_image, mask_path)
+    utils.save_volume(probability_image, probability_path)
+    record_path = output_dir / f"{subject_id}_components.json"
+    csv_path = output_dir / f"{subject_id}_components.csv"
+    csv_fieldnames = [
+        "candidate_id",
+        "detector_probability",
+        "student_probability",
+        "accepted",
+    ]
+    if postprocessing is not None:
+        csv_fieldnames.append("postprocessing_accepted")
+    csv_buffer = io.StringIO()
+    csv_writer = csv.DictWriter(csv_buffer, fieldnames=csv_fieldnames)
+    csv_writer.writeheader()
+    for record in candidate_records:
+        csv_writer.writerow({key: record.get(key) for key in csv_fieldnames})
+    # Publish the component JSON first, then the CSV report last.
+    components_payload = {"subject_id": subject_id, "components": candidate_records}
+    storage.write_json_atomic(record_path, components_payload)
+    storage.write_text_atomic(csv_path, csv_buffer.getvalue())
+    return PredictionSummary(
+        subject_id=subject_id,
+        mask_path=mask_path,
+        probability_path=probability_path,
+        components_path=record_path,
+        component_count=len(candidate_records),
+    )
+
+
+def execute(config: InferCommandConfig) -> PredictionSummary:
+    device = torch.device(config.device)
+    config.output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Seed and record provenance before any prediction is written, so every
+    # output directory can be traced back to its config, seed, and revision.
+    provenance.seed_everything(config.seed)
+    provenance.write_provenance(
+        config.output_dir, config, seed=config.seed, device=device
+    )
+
+    return predict_volume(
+        volume_path=config.volume_path,
+        output_dir=config.output_dir,
+        detector_config=config.detector,
+        student_config=config.student,
+        detector_checkpoint=config.detector_checkpoint,
+        student_checkpoint=config.student_checkpoint,
+        preprocessing=config.preprocessing,
+        device=device,
+        patch_batch_size=config.patch_batch_size,
+        subject_id=config.subject_id,
+        postprocessing=config.postprocessing,
+    )

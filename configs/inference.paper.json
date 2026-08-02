@@ -1,0 +1,47 @@
+{
+    "data": {
+        "modality": "T2*-GRE",
+        "require_masks": false
+    },
+    "preprocessing": {
+        "canonical_orientation": true,
+        "extract_brain": true,
+        "bias_field_correction": true,
+        "invert_volume": true,
+        "inpaint_vessels": true
+    },
+    "detector": {
+        "initial_channels": 64,
+        "input_channels": 2,
+        "output_classes": 2,
+        "dropout_rate": 0.5,
+        "patch_size": 48,
+        "augmentation_factor": 1,
+        "probability_threshold": 0.0
+    },
+    "student": {
+        "initial_channels": 64,
+        "input_channels": 2,
+        "output_classes": 2,
+        "dropout_rate": 0.5,
+        "patch_size": 24,
+        "augmentation_factor": 1,
+        "probability_threshold": 0.0,
+        "temperature": 4.0,
+        "alpha": 0.4,
+        "beta": 0.6
+    },
+    "postprocessing": {
+        "minimum_volume_mm3": 2.5,
+        "maximum_eccentricity": 0.2,
+        "minimum_boundary_distance_voxels": 0.0
+    },
+    "evaluation": {
+        "detector_thresholds": [
+            0.0
+        ],
+        "discriminator_thresholds": [
+            0.0
+        ]
+    }
+}

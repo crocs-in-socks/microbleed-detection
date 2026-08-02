@@ -1,7 +1,0 @@
-nibabel
-numpy
-scikit-image
-scikit-learn
-scipy
-torch
-tqdm
