@@ -313,6 +313,13 @@ class EvaluationSubject(FrozenConfig):
     reference_path: Path = Field(
         description="Source-space reference (ground-truth) lesion mask.",
     )
+    probability_path: Path | None = Field(
+        default=None,
+        description=(
+            "Source-space predicted probability map for this subject. Required "
+            "only for the FROC sweep; omit it for binary-mask metrics alone."
+        ),
+    )
 
 
 class EvaluateCommandConfig(FrozenConfig):
@@ -327,6 +334,34 @@ class EvaluateCommandConfig(FrozenConfig):
         default=None,
         description="Optional free-form metadata recorded in the report header.",
     )
+    froc_thresholds: tuple[float, ...] | None = Field(
+        default=None,
+        description=(
+            "Probability thresholds to sweep for FROC, each in [0, 1]. When set, "
+            "every subject must also supply probability_path; the sweep is "
+            "written to froc.json and froc.csv."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def validate_froc(self) -> "EvaluateCommandConfig":
+        if self.froc_thresholds is None:
+            return self
+        if not self.froc_thresholds or any(
+            value < 0.0 or value > 1.0 for value in self.froc_thresholds
+        ):
+            raise ValueError("froc_thresholds must be nonempty and each in [0, 1]")
+        missing = [
+            subject.subject_id
+            for subject in self.subjects
+            if subject.probability_path is None
+        ]
+        if missing:
+            raise ValueError(
+                "froc_thresholds requires probability_path for every subject; "
+                f"missing for: {missing}"
+            )
+        return self
 
 
 class DataSplitConfig(FrozenConfig):
