@@ -68,14 +68,23 @@ class Trainer:
             self.model = model
 
         optimizer_parameters = dict(optimizer_parameters)
-        optimizer_parameters["lr"] = 1e-3
         self.clip_norm = optimizer_parameters.pop("clip_norm", _DEFAULT_CLIP_NORM)
         self.optimizer = optim.Adam(self.model.parameters(), **optimizer_parameters)
+
+        # Step decay: every ``step_size`` epochs the learning rate is multiplied
+        # by ``gamma``, floored at ``minimum_learning_rate``. With the paper's
+        # values (lr=1e-3, gamma=0.1, step_size=2, floor=1e-6) this reproduces
+        # the original schedule exactly; the config now drives every term.
+        scheduler_parameters = dict(scheduler_parameters)
+        gamma = scheduler_parameters["gamma"]
+        step_size = scheduler_parameters["step_size"]
+        minimum_learning_rate = scheduler_parameters["minimum_learning_rate"]
+        initial_learning_rate = optimizer_parameters["lr"]
         self.scheduler = optim.lr_scheduler.LambdaLR(
             self.optimizer,
             lambda completed_epochs: max(
-                1e-6 / optimizer_parameters["lr"],
-                0.1 ** (completed_epochs // 2),
+                minimum_learning_rate / initial_learning_rate,
+                gamma ** (completed_epochs // step_size),
             ),
         )
 
@@ -99,7 +108,7 @@ class Trainer:
         if checkpoint_path:
             start_epoch = self.load_checkpoint(checkpoint_path, weights_only)
 
-        for epoch in range(start_epoch, min(n_epochs, 100)):
+        for epoch in range(start_epoch, n_epochs):
             train_loss = self.train_epoch(train_loader)
             val_loss = self.evaluator.evaluate(val_loader)
             is_best = val_loss < self.best_val_loss - self.min_delta
