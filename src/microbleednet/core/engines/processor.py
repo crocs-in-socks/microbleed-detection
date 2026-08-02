@@ -4,6 +4,7 @@ import numpy as np
 import nibabel as nib
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.amp import autocast
 from nibabel.orientations import io_orientation, ornt_transform, apply_orientation
 
@@ -111,8 +112,7 @@ def infer(
     volume = np.expand_dims(volume, axis=(0, 1)) # Shape: (1, 1, H, W, D)
     volume = torch.from_numpy(volume).float().to(device)
 
-    volume_frst = frst.apply(volume)
-    volume = torch.cat((volume, volume_frst), dim=1)
+    volume = frst.prepend_frst_channel(volume)
 
     model = model.to(device)
     model.eval()
@@ -123,5 +123,15 @@ def infer(
                 logits = model(volume)
         else:
             logits = model(volume)
-    
+
     return logits
+
+
+def positive_class_probability(logits: torch.Tensor) -> np.ndarray:
+    """Softmax over the class axis, returning the positive-class channel as numpy.
+
+    Every consumer of a two-class output wants the same thing: the per-voxel
+    probability of the foreground (index 1) class. Input shape (Batch, 2, ...);
+    output shape (Batch, ...).
+    """
+    return F.softmax(logits, dim=1)[:, 1].cpu().numpy()

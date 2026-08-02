@@ -27,11 +27,6 @@ class BaseTask:
         )
 
 
-def _volume_with_frst(volume: torch.Tensor) -> torch.Tensor:
-    """Concatenate the FRST transform onto the volume as a second channel."""
-    return torch.cat((volume, frst.apply(volume)), dim=1)  # Shape: (Batch, 2, H, W, D)
-
-
 class SegmentationTask(BaseTask):
     def __init__(self):
         self.criterion = losses.DetectorLoss()
@@ -42,7 +37,7 @@ class SegmentationTask(BaseTask):
         volume = batch["volume"].to(device, dtype=torch.float)
         mask = batch["mask"].to(device, dtype=torch.long)
 
-        logits = model(_volume_with_frst(volume))
+        logits = model(frst.prepend_frst_channel(volume))
         loss = self.criterion(logits, mask)
 
         return loss
@@ -64,7 +59,8 @@ class SegmentationClassificationTask(BaseTask):
         mask = batch["mask"].to(device, dtype=torch.long)
         label = batch["label"].to(device, dtype=torch.long)
 
-        segmentation_logits, classification_logits = model(_volume_with_frst(volume))
+        volume = frst.prepend_frst_channel(volume)
+        segmentation_logits, classification_logits = model(volume)
         loss = self.criterion(classification_logits, label, segmentation_logits, mask)
 
         return loss
@@ -90,7 +86,7 @@ class KnowledgeDistillationClassificationTask(BaseTask):
         volume = batch["volume"].to(device, dtype=torch.float)
         label = batch["label"].to(device, dtype=torch.long)
 
-        volume = _volume_with_frst(volume)
+        volume = frst.prepend_frst_channel(volume)
 
         with torch.no_grad():
             _, teacher_logits = self.teacher_model(volume)

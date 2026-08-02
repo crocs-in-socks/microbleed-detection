@@ -5,7 +5,6 @@ from pathlib import Path
 
 import numpy as np
 import torch
-import torch.nn.functional as F
 from skimage.measure import label, regionprops
 
 from .. import provenance, storage
@@ -68,9 +67,9 @@ def _student_probabilities(student, patches: list[np.ndarray], device: torch.dev
     with torch.no_grad():
         for start in range(0, len(patches), batch_size):
             batch = torch.from_numpy(np.stack(patches[start:start + batch_size])).float().unsqueeze(1).to(device)
-            batch = torch.cat((batch, frst.apply(batch)), dim=1)
+            batch = frst.prepend_frst_channel(batch)
             logits = student(batch)
-            probabilities.append(F.softmax(logits, dim=1)[:, 1].cpu().numpy())
+            probabilities.append(processor.positive_class_probability(logits))
     return np.concatenate(probabilities)
 
 
@@ -98,7 +97,7 @@ def predict_volume(
     )
 
     detector_logits = processor.infer(detector, device, processed.image)
-    detector_probability = F.softmax(detector_logits, dim=1).cpu().numpy()[0, 1]
+    detector_probability = processor.positive_class_probability(detector_logits)[0]
     candidate_mask = detector_probability >= detector_threshold
     candidate_records, candidate_labels = _candidate_records(candidate_mask, detector_probability, subject_id)
     candidate_patch_size = student_config.patch_size

@@ -110,6 +110,18 @@ def apply(
     return output
 
 
+def prepend_frst_channel(volume: torch.Tensor) -> torch.Tensor:
+    """Return ``volume`` with its FRST transform appended as a second channel.
+
+    Every model in the pipeline consumes two input channels: the volume and its
+    FRST response, concatenated along the channel axis. This is the single place
+    that pairing is expressed, so tasks, inference, and the processor all agree.
+
+    Input/output shape: (Batch, 1, H, W, D) -> (Batch, 2, H, W, D).
+    """
+    return torch.cat((volume, apply(volume)), dim=1)
+
+
 def normalize_tensor_slicewise(tensor: torch.Tensor) -> torch.Tensor:
     # Assumes tensor shape is (N, H, W)
     t_min = tensor.amin(dim=(1, 2), keepdim=True)
