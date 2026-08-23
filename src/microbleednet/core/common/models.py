@@ -1,7 +1,13 @@
 import torch
 import torch.nn as nn
 
+from ..datamodels import ClassifierArchitecture, ModelArchitecture
 from . import layers
+
+# Every model consumes two input channels: the preprocessed image plus its FRST
+# transform, concatenated by ``frst.prepend_frst_channel`` before the forward
+# pass. This is fixed by the architecture, not a tunable config.
+INPUT_CHANNELS = 2
 
 
 def weight_init(model):
@@ -14,9 +20,13 @@ def weight_init(model):
 
 
 class CandidateDetector(nn.Module):
-    def __init__(self, input_channels: int, output_classes: int, initial_channels: int):
+    def __init__(
+        self,
+        architecture: ModelArchitecture,
+    ):
         super().__init__()
 
+        initial_channels = architecture.initial_channels
         level_channels = [
             3,
             initial_channels,
@@ -24,8 +34,8 @@ class CandidateDetector(nn.Module):
             initial_channels * 4,
         ]
 
-        self.feature_extractor = FeatureExtractor(input_channels, level_channels)
-        self.segmentor = Segmentor(level_channels, output_classes)
+        self.feature_extractor = FeatureExtractor(INPUT_CHANNELS, level_channels)
+        self.segmentor = Segmentor(level_channels, architecture.output_classes)
 
         self.apply(weight_init)
 
@@ -38,13 +48,12 @@ class CandidateDetector(nn.Module):
 class CandidateDiscriminatorTeacher(nn.Module):
     def __init__(
         self,
-        input_channels: int,
-        output_classes: int,
-        initial_channels: int,
-        dropout_rate: float,
+        architecture: ClassifierArchitecture,
     ):
         super().__init__()
 
+        initial_channels = architecture.initial_channels
+        output_classes = architecture.output_classes
         level_channels = [
             3,
             initial_channels,
@@ -52,9 +61,11 @@ class CandidateDiscriminatorTeacher(nn.Module):
             initial_channels * 4,
         ]
 
-        self.feature_extractor = FeatureExtractor(input_channels, level_channels)
+        self.feature_extractor = FeatureExtractor(INPUT_CHANNELS, level_channels)
         self.segmentor = Segmentor(level_channels, output_classes)
-        self.classifier = Classifier(level_channels[3], output_classes, dropout_rate)
+        self.classifier = Classifier(
+            level_channels[3], output_classes, architecture.dropout_rate
+        )
 
         self.apply(weight_init)
 
@@ -68,13 +79,11 @@ class CandidateDiscriminatorTeacher(nn.Module):
 class CandidateDiscriminatorStudent(nn.Module):
     def __init__(
         self,
-        input_channels: int,
-        output_classes: int,
-        initial_channels: int,
-        dropout_rate: float,
+        architecture: ClassifierArchitecture,
     ):
         super().__init__()
 
+        initial_channels = architecture.initial_channels
         level_channels = [
             3,
             initial_channels,
@@ -82,8 +91,10 @@ class CandidateDiscriminatorStudent(nn.Module):
             initial_channels * 4,
         ]
 
-        self.feature_extractor = FeatureExtractor(input_channels, level_channels)
-        self.classifier = Classifier(level_channels[3], output_classes, dropout_rate)
+        self.feature_extractor = FeatureExtractor(INPUT_CHANNELS, level_channels)
+        self.classifier = Classifier(
+            level_channels[3], architecture.output_classes, architecture.dropout_rate
+        )
 
         self.apply(weight_init)
 
@@ -137,10 +148,10 @@ class Classifier(nn.Module):
 
         level_channels = [in_channels, in_channels // 2]
 
-        linear_nodes = [level_channels[1], 128, 32, n_classes]
+        linear_nodes = [level_channels[1] * 2**3, 128, 32, n_classes]
 
         self.in_conv = layers.SingleConv(
-            level_channels[0], level_channels[1], 1, padding=0
+            level_channels[0], level_channels[1], 1, padding=1
         )
         self.down_1 = layers.DownConv(level_channels[1], level_channels[1], 3, 3)
         self.down_2 = layers.DownConv(level_channels[1], level_channels[1], 3, 3)
@@ -148,7 +159,7 @@ class Classifier(nn.Module):
         self.dropout = nn.Dropout(p=dropout_rate)
         self.fc_2 = nn.Linear(linear_nodes[1], linear_nodes[2])
         self.fc_3 = nn.Linear(linear_nodes[2], linear_nodes[3])
-        self.expected_features = level_channels[1]
+        self.expected_features = linear_nodes[0]
 
     def forward(self, features: dict[str, torch.Tensor]) -> torch.Tensor:
         x3 = features["x3"]

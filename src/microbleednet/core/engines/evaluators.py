@@ -16,7 +16,7 @@ class Evaluator:
 
     @staticmethod
     def _batch_size(batch) -> int:
-        for value in batch.values():
+        for value in batch:
             if isinstance(value, torch.Tensor):
                 return value.shape[0]
         raise ValueError("validation batch contains no tensor with a sample dimension")

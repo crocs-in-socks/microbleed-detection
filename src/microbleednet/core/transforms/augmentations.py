@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.ndimage import gaussian_filter
 
-from microbleednet.config import AugmentationConfig
+from microbleednet.core.datamodels import AugmentationConfig
 
 
 def translate_array(array: np.ndarray, offset_x: int, offset_y: int) -> np.ndarray:

@@ -4,7 +4,7 @@ import numpy as np
 from scipy.ndimage import distance_transform_edt
 from skimage.measure import label, regionprops
 
-from .components import label_prediction_components
+from .components import describe_components
 
 
 def _projection_eccentricity(component_mask: np.ndarray) -> float:
@@ -23,19 +23,19 @@ def filter_components(
     brain_mask: np.ndarray,
     minimum_volume_mm3: float = 2.5,
     maximum_eccentricity: float = 0.2,
-    minimum_boundary_distance_voxels: float = 0.0,
+    minimum_boundary_distance_mm: float = 5.0,
     source_subject: str = "",
 ) -> list[dict[str, Any]]:
     if prediction_mask.shape != brain_mask.shape or prediction_mask.ndim != 3:
         raise ValueError("prediction_mask and brain_mask must be matching 3D arrays")
     if len(spacing) != 3 or any(value <= 0 for value in spacing):
         raise ValueError("spacing must contain three positive values")
-    if minimum_volume_mm3 < 0 or minimum_boundary_distance_voxels < 0:
+    if minimum_volume_mm3 < 0 or minimum_boundary_distance_mm < 0:
         raise ValueError("filter thresholds must be non-negative")
 
-    components = label_prediction_components(prediction_mask, source_subject)
+    _, components = describe_components(prediction_mask, source_subject)
     brain = brain_mask > 0
-    distance = distance_transform_edt(brain)
+    distance = distance_transform_edt(brain, sampling=spacing)
     assert distance is not None
     voxel_volume = float(np.prod(spacing))
     results = []
@@ -49,13 +49,13 @@ def filter_components(
             reasons.append("volume")
         if eccentricity > maximum_eccentricity:
             reasons.append("eccentricity")
-        if boundary_distance < minimum_boundary_distance_voxels:
+        if boundary_distance < minimum_boundary_distance_mm:
             reasons.append("boundary_distance")
         component.update(
             {
                 "volume_mm3": volume_mm3,
                 "eccentricity": eccentricity,
-                "boundary_distance_voxels": boundary_distance,
+                "boundary_distance_mm": boundary_distance,
                 "accepted": not reasons,
                 "rejection_reasons": reasons,
             }

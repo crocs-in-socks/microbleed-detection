@@ -1,0 +1,52 @@
+dataset_dir = "data/indexed"
+experiment_dir = "experiments/paper"
+device = "cpu"
+num_workers = 0
+pin_memory = false
+
+[detector]
+patch_size = 48
+augmentation_factor = 10
+probability_threshold = 0.2
+
+[detector.architecture]
+initial_channels = 64
+output_classes = 2
+
+[teacher]
+patch_size = 24
+augmentation_factor = 5
+
+[teacher.architecture]
+initial_channels = 64
+output_classes = 2
+dropout_rate = 0.2
+
+[student]
+patch_size = 24
+augmentation_factor = 5
+probability_threshold = 0.2
+temperature = 4.0
+alpha = 0.4
+beta = 0.6
+
+[student.architecture]
+initial_channels = 64
+output_classes = 2
+dropout_rate = 0.2
+
+[trainer]
+learning_rate = 0.001
+adam_epsilon = 0.0001
+weight_decay = 0.0
+batch_size = 8
+max_epochs = 100
+patience = 20
+learning_rate_factor = 0.1
+learning_rate_period = 2
+minimum_learning_rate = 1e-06
+
+[datasplit]
+test_size = 0.2
+random_state = 42
+shuffle = true

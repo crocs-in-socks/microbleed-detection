@@ -1,11 +1,13 @@
 import torch
 from torch.utils.data import Sampler
 
+from microbleednet.core.datamodels import PatchRecord
+
 
 class EqualBatchSampler(Sampler):
     def __init__(
         self,
-        patches: list,
+        patches: list[PatchRecord],
         batch_size: int,
         epoch_length: int | None = None,
         generator=None,
@@ -18,10 +20,10 @@ class EqualBatchSampler(Sampler):
         self.generator = generator or torch.Generator()
 
         self.pos_indices = [
-            i for i, patch in enumerate(patches) if patch["has_microbleed"]
+            i for i, patch in enumerate(patches) if patch.has_microbleed
         ]
         self.neg_indices = [
-            i for i, patch in enumerate(patches) if not patch["has_microbleed"]
+            i for i, patch in enumerate(patches) if not patch.has_microbleed
         ]
 
         if not self.pos_indices or not self.neg_indices:

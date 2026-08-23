@@ -11,6 +11,7 @@ from microbleednet.core.common.models import (
     CandidateDiscriminatorStudent,
     CandidateDiscriminatorTeacher,
 )
+from microbleednet.core.datamodels import ClassifierArchitecture, ModelArchitecture
 
 
 def test_detector_loss_matches_weighted_cross_entropy_and_dice() -> None:
@@ -84,15 +85,21 @@ def test_distillation_loss_is_weighted_and_identical_logits_are_zero() -> None:
 
 
 def test_models_support_paper_patch_geometry() -> None:
-    detector = CandidateDetector(2, 2, 16)
+    detector = CandidateDetector(
+        ModelArchitecture(output_classes=2, initial_channels=16)
+    )
     detector_output = detector(torch.randn(2, 2, 48, 48, 48))
     assert detector_output.shape == (2, 2, 48, 48, 48)
 
-    teacher = CandidateDiscriminatorTeacher(2, 2, 16, 0.1)
+    teacher = CandidateDiscriminatorTeacher(
+        ClassifierArchitecture(output_classes=2, initial_channels=16, dropout_rate=0.1)
+    )
     segmentation, classification = teacher(torch.randn(2, 2, 24, 24, 24))
     assert segmentation.shape == (2, 2, 24, 24, 24)
     assert classification.shape == (2, 2)
 
-    student = CandidateDiscriminatorStudent(2, 2, 16, 0.1)
+    student = CandidateDiscriminatorStudent(
+        ClassifierArchitecture(output_classes=2, initial_channels=16, dropout_rate=0.1)
+    )
     student_output = student(torch.randn(2, 2, 24, 24, 24))
     assert student_output.shape == (2, 2)

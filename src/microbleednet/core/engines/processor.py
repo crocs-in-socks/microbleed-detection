@@ -4,79 +4,68 @@ import nibabel as nib
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from nibabel.affines import voxel_sizes
 from nibabel.orientations import apply_orientation, io_orientation, ornt_transform
-from skimage.measure import label, regionprops
 from torch.amp.autocast_mode import autocast
 
-from microbleednet.core import transforms, utils
-from microbleednet.core.transforms import frst
-from microbleednet.records import (
+from microbleednet.core import io
+from microbleednet.core.datamodels import (
     CropTransform,
     FloatArray,
     ImageGeometry,
     IntArray,
+    Modality,
     PreprocessResult,
 )
+from microbleednet.core.transforms import frst, inpaint_vessels, volume_ops
 
 
 def preprocess(
     volume: nib.Nifti1Image,
     mask: Optional[nib.Nifti1Image],
-    canonical_orientation: bool,
-    extract_brain: bool,
-    bias_field_correction: bool,
-    invert_volume: bool,
-    inpaint_vessels: bool,
+    modality: Modality,
 ) -> PreprocessResult:
+    # cast() here is a static type-checker hint, not a runtime conversion: it
+    # narrows nibabel's loosely-typed shape (tuple[int, ...]) and optional affine
+    # (ndarray | None) to the fixed types CropTransform declares. The values are
+    # not coerced -- the real 3-D / finite-affine invariant is enforced when this
+    # feeds CropTransform below, whose __post_init__ validates shape and affine.
     source_shape = cast(tuple[int, int, int], tuple(int(v) for v in volume.shape))
     source_affine = cast(FloatArray, volume.affine).copy()
     source_orientation = io_orientation(source_affine)
-    if canonical_orientation:
-        canonical_volume = transforms.basic.reorient_to_std(volume)
-        target_orientation = io_orientation(cast(FloatArray, canonical_volume.affine))
-        orientation_transform = ornt_transform(source_orientation, target_orientation)
-    else:
-        canonical_volume = volume
-        orientation_transform = np.array(
-            [[0.0, 1.0], [1.0, 1.0], [2.0, 1.0]], dtype=np.float64
-        )
+    canonical_volume = volume_ops.reorient_to_std(volume)
+    target_orientation = io_orientation(cast(FloatArray, canonical_volume.affine))
+    orientation_transform = ornt_transform(source_orientation, target_orientation)
 
     if mask is not None:
         if not np.allclose(cast(FloatArray, mask.affine), source_affine):
             raise ValueError("image and mask affines do not match")
-        if canonical_orientation:
-            mask = transforms.basic.reorient_to_std(mask)
+        mask = volume_ops.reorient_to_std(mask)
         if mask.shape != canonical_volume.shape:
             raise ValueError("reoriented image and mask shapes do not match")
 
-    processed_volume = canonical_volume
-    if extract_brain:
-        processed_volume = transforms.basic.extract_brain(processed_volume)
+    processed_volume = volume_ops.extract_brain(canonical_volume)
+    if modality in {"T2*-GRE", "SWI"}:
+        processed_volume = volume_ops.bias_field_correct_n4(processed_volume)
 
-    if bias_field_correction:
-        processed_volume = transforms.basic.bias_field_correct_n4(processed_volume)
+    volume_array = io.nifti_to_numpy(processed_volume).astype(np.float32)
+    volume_array = volume_ops.normalize_volume(volume_array)
 
-    volume_array = utils.nifti_to_numpy(processed_volume).astype(np.float32)
-    volume_array = transforms.basic.normalize_volume(volume_array)
+    if modality in {"T2*-GRE", "SWI"}:
+        volume_array = volume_ops.invert_volume(volume_array)
 
-    if invert_volume:
-        volume_array = transforms.basic.invert_volume(volume_array)
-
-    volume_array, bounding_box = transforms.basic.tight_crop_volume(volume_array)
+    volume_array, bounding_box = volume_ops.tight_crop_volume(volume_array)
     crop_start = cast(tuple[int, int, int], tuple(b[0] for b in bounding_box))
     crop_stop = cast(tuple[int, int, int], tuple(b[1] for b in bounding_box))
     mask_array: Optional[IntArray] = None
     if mask is not None:
-        mask_array = utils.nifti_to_numpy(mask).astype(np.int16)
-        mask_array = transforms.basic.apply_bounding_box(mask_array, bounding_box)
+        mask_array = io.nifti_to_numpy(mask).astype(np.int16)
+        mask_array = volume_ops.apply_bounding_box(mask_array, bounding_box)
 
-    if inpaint_vessels:
-        volume_array = transforms.inpaint_vessels.apply(volume_array)
+    volume_array = inpaint_vessels.apply(volume_array)
 
     canonical_affine = cast(FloatArray, canonical_volume.affine)
-    cropped_affine = transforms.basic.crop_affine(canonical_affine, crop_start)
+    cropped_affine = volume_ops.crop_affine(canonical_affine, crop_start)
     geometry = ImageGeometry(
         shape=cast(tuple[int, int, int], tuple(int(v) for v in volume_array.shape)),
         affine=cropped_affine,
@@ -139,32 +128,4 @@ def infer(model: nn.Module, device: torch.device, volume: np.ndarray):
     return logits
 
 
-def positive_class_probability(logits: torch.Tensor) -> np.ndarray:
-    """Softmax over the class axis, returning the positive-class channel as numpy.
 
-    Every consumer of a two-class output wants the same thing: the per-voxel
-    probability of the foreground (index 1) class. Input shape (Batch, 2, ...);
-    output shape (Batch, ...).
-    """
-    return F.softmax(logits, dim=1)[:, 1].cpu().numpy()
-
-
-def label_candidates(
-    candidate_mask: np.ndarray, probability: np.ndarray
-) -> tuple[np.ndarray, list, dict[int, float]]:
-    """Label connected candidate components and score each by mean probability.
-
-    Runs 26-connected labeling (``connectivity=3``) over ``candidate_mask`` and
-    returns the label volume, the ``skimage`` regions, and a mapping from each
-    region label to the mean ``probability`` over that component's voxels.
-    Callers own the threshold that produced ``candidate_mask`` — this is the
-    shared labeling-and-scoring step that follows it, with no behavior of its
-    own.
-    """
-    candidate_labels = cast(np.ndarray, label(candidate_mask, connectivity=3))
-    regions = regionprops(candidate_labels)
-    mean_probabilities: dict[int, float] = {
-        int(region.label): float(probability[candidate_labels == region.label].mean())
-        for region in regions
-    }
-    return candidate_labels, regions, mean_probabilities

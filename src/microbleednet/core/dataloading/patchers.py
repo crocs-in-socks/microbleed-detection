@@ -1,94 +1,81 @@
-import hashlib
-import os
-import tempfile
 from pathlib import Path
 
 import numpy as np
 
-from microbleednet import storage
+from microbleednet.core.datamodels import ExtractedPatch, PatchRecord
+from microbleednet.core.io import save_array_atomic
 from microbleednet.core.transforms import patch
 
 # No augmentation multiplier unless a caller asks for one.
-_DEFAULT_AUGMENTATION_FACTOR = 1
+DEFAULT_AUGMENTATION_FACTOR = 1
 
 
 def nonoverlapping_patcher(
     volume: np.ndarray, mask: np.ndarray, patch_size: int
-) -> list:
+) -> list[ExtractedPatch]:
     volume_patches = patch.get_nonoverlapping_patches(volume, patch_size)
     mask_patches = patch.get_nonoverlapping_patches(mask, patch_size)
 
     return [
-        {
-            "volume": volume_patch,
-            "mask": mask_patch,
-        }
+        ExtractedPatch(volume=volume_patch, mask=mask_patch)
         for volume_patch, mask_patch in zip(volume_patches, mask_patches)
     ]
 
 
 def target_centered_patcher(
-    volume: np.ndarray, mask: np.ndarray, target: np.ndarray, patch_size: int
-) -> list:
-    volume_records = patch.get_target_centered_patch_records(volume, target, patch_size)
-    mask_records = patch.get_target_centered_patch_records(mask, target, patch_size)
+    volume: np.ndarray,
+    mask: np.ndarray,
+    centers: list[tuple[int, int, int]],
+    patch_size: int,
+) -> list[ExtractedPatch]:
+    volume_patches = patch.extract_centered_patches(volume, centers, patch_size)
+    mask_patches = patch.extract_centered_patches(mask, centers, patch_size)
 
     return [
-        {
-            "volume": volume_record[0],
-            "mask": mask_record[0],
-            "patch_bounds": volume_record[1],
-            "candidate_id": volume_record[2],
-        }
-        for volume_record, mask_record in zip(volume_records, mask_records)
+        ExtractedPatch(volume=volume_patch, mask=mask_patch)
+        for volume_patch, mask_patch in zip(volume_patches, mask_patches)
     ]
 
 
 def materialize_patches(
-    patches: list,
+    patches: list[ExtractedPatch],
     patch_dir: Path,
     volume_identifier: str,
-    augmentation_factor: int = _DEFAULT_AUGMENTATION_FACTOR,
-):
+    augmentation_factor: int = DEFAULT_AUGMENTATION_FACTOR,
+) -> list[PatchRecord]:
     patch_dir.mkdir(parents=True, exist_ok=True)
 
-    patch_metadata = []
-    manifest = []
+    if not patches:
+        return []
 
-    for idx, patch_data in enumerate(patches):
-        patch_path = patch_dir / f"patch_{volume_identifier}_{idx:06d}.npz"
-        arrays = {
-            key: value
-            for key, value in patch_data.items()
-            if isinstance(value, np.ndarray)
-        }
-        with tempfile.NamedTemporaryFile(
-            dir=patch_dir, suffix=".npz", delete=False
-        ) as temporary_file:
-            temporary_path = Path(temporary_file.name)
-        try:
-            np.savez_compressed(temporary_path, **arrays)  # pyright: ignore[reportArgumentType]
-            os.replace(temporary_path, patch_path)
-        finally:
-            temporary_path.unlink(missing_ok=True)
+    # Stack the subject's fixed-shape patches into two (N, P, P, P) arrays and
+    # write one .npy file each, rather than a tiny file per patch. The datasets
+    # memory-map these and slice one patch by index, so random access stays O(1)
+    # while the file count drops from 2*patches to 2 per subject. Uncompressed:
+    # patches are written once and re-read every epoch, and float intensity data
+    # compresses poorly, so we trade disk for no per-read decompression.
+    volumes = np.stack([patch.volume for patch in patches])
+    masks = np.stack([patch.mask for patch in patches])
 
-        checksum = hashlib.sha256(patch_path.read_bytes()).hexdigest()
-        has_microbleed = bool(np.any(patch_data["mask"] > 0))
-        record = {
-            "patch_path": str(patch_path.resolve()),
-            "source_subject": volume_identifier,
-            "patch_bounds": patch_data.get("patch_bounds"),
-            "candidate_id": patch_data.get("candidate_id", idx),
-            "candidate_probability": patch_data.get("candidate_probability"),
-            "has_microbleed": has_microbleed,
-            "augmentation_version": 0,
-            "augmentation_factor": int(augmentation_factor),
-            "checksum": checksum,
-        }
-        patch_metadata.append(record)
-        manifest.append(record)
+    volume_path = (patch_dir / f"volumes_{volume_identifier}.npy").resolve()
+    mask_path = (patch_dir / f"masks_{volume_identifier}.npy").resolve()
+    save_array_atomic(volumes, volume_path)
+    save_array_atomic(masks, mask_path)
 
-    manifest_path = patch_dir / f"manifest_{volume_identifier}.json"
-    storage.write_json_atomic(manifest_path, manifest)
+    records: list[PatchRecord] = []
+    for index, mask in enumerate(masks):
+        record = PatchRecord(
+            volume_path=str(volume_path),
+            mask_path=str(mask_path),
+            patch_index=index,
+            has_microbleed=bool(np.any(mask > 0)),
+        )
+        # Inflate the training set by augmentation_factor without duplicating the
+        # patch on disk: each patch is stored once, then its record is referenced
+        # factor times. The dataset seeds augmentation on each record's position
+        # in the final list, so the copies land at distinct positions and yield
+        # distinct augmentations of the same stored patch. Validation passes
+        # factor=1, so it is never inflated.
+        records.extend(record for _ in range(augmentation_factor))
 
-    return patch_metadata
+    return records

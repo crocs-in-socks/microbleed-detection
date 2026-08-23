@@ -5,12 +5,17 @@ from microbleednet.core.common.models import (
     CandidateDetector,
     CandidateDiscriminatorTeacher,
 )
+from microbleednet.core.datamodels import ClassifierArchitecture, ModelArchitecture
 
 
 def test_teacher_transfer_updates_all_parameter_groups() -> None:
     torch.manual_seed(7)
-    detector = CandidateDetector(1, 2, 1)
-    teacher = CandidateDiscriminatorTeacher(1, 2, 1, 0.0)
+    detector = CandidateDetector(
+        ModelArchitecture(output_classes=2, initial_channels=1)
+    )
+    teacher = CandidateDiscriminatorTeacher(
+        ClassifierArchitecture(output_classes=2, initial_channels=1, dropout_rate=0.0),
+    )
     classifier_before = {
         key: value.clone() for key, value in teacher.classifier.state_dict().items()
     }
@@ -30,7 +35,7 @@ def test_teacher_transfer_updates_all_parameter_groups() -> None:
         for name, parameter in teacher.named_parameters()
     }
     optimizer = torch.optim.Adam(teacher.parameters(), lr=1e-3)
-    inputs = torch.randn(2, 1, 24, 24, 24)
+    inputs = torch.randn(2, 2, 24, 24, 24)
     segmentation_target = torch.zeros(2, 24, 24, 24, dtype=torch.long)
     classification_target = torch.zeros(2, dtype=torch.long)
     segmentation_logits, classification_logits = teacher(inputs)
