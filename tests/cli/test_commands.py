@@ -137,7 +137,7 @@ def _run_index_data(
     tmp_path: Path,
     dataset_dir: Path,
     input_dir: Path,
-    source_id: str | None = None,
+    source_id: str = "source",
 ) -> Result:
     config_path = tmp_path / f"index_{input_dir.name}.toml"
     write_index_config(
@@ -166,7 +166,7 @@ def test_index_data_accumulates_sources(tmp_path: Path) -> None:
     manifest = _read_raw_manifest(dataset_dir)
     assert len(manifest["sources"]) == 2
     ids = [subject["subject_id"] for subject in manifest["subjects"]]
-    assert ids == ["subject_1", "subject_2", "subject_3"]
+    assert ids == ["source_subject_1", "source_subject_2", "source_subject_3"]
     assert manifest["created_at"] <= manifest["updated_at"]
 
 
@@ -178,7 +178,7 @@ def test_index_data_rejects_duplicate_subject_across_sources(tmp_path: Path) -> 
     assert _run_index_data(tmp_path, dataset_dir, first).exit_code == 0
     result = _run_index_data(tmp_path, dataset_dir, second)
     assert result.exit_code != 0
-    assert "subject_1" in str(result.exception)
+    assert "source_subject_1" in str(result.exception)
 
     # The failed run must not have clobbered the existing manifest.
     manifest = _read_raw_manifest(dataset_dir)
