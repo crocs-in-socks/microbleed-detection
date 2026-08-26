@@ -57,4 +57,5 @@ def test_label_dir_required_when_masks_are_required(tmp_path) -> None:
             dataset_dir=tmp_path / "dataset",
             input_dir=tmp_path,
             volume_pattern="{subject_id}.nii.gz",
+            source_id="test-source",
         )

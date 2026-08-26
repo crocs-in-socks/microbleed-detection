@@ -75,11 +75,12 @@ def index_source(
         )
 
     def namespaced(subject_id: str) -> str:
-        return f"{config.source_id}_{subject_id}" if config.source_id else subject_id
+        return f"{config.source_id}_{subject_id}"
 
     subjects = [
         RawSubject(
             subject_id=namespaced(subject_id),
+            source_id=config.source_id,
             volume_path=str(volume_subject_map[subject_id].resolve()),
             mask_path=(
                 str(mask_subject_map[subject_id].resolve())
@@ -98,6 +99,7 @@ def index_source(
         volume_pattern=config.volume_pattern,
         mask_pattern=config.mask_pattern,
         source_id=config.source_id,
+        modality=config.modality,
         added_on=now,
     )
     return source, subjects, unmatched_volumes, unmatched_masks
@@ -125,7 +127,8 @@ def merge_source(
     if collisions:
         raise ValueError(
             "subjects already indexed in this dataset: "
-            f"{sorted(collisions)}; index them into a fresh dataset directory or add a source_id."
+            f"{sorted(collisions)}; index them into a fresh dataset directory "
+            "or add a source_id."
         )
 
     return RawDatasetManifest(
