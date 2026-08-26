@@ -13,6 +13,7 @@ def make_index_config(tmp_path: Path, **overrides: object) -> IndexDataConfig:
         "input_dir": tmp_path,
         "volume_pattern": "{subject_id}_volume.nii.gz",
         "require_masks": False,
+        "source_id": "test-source",
     }
     values.update(overrides)
     return IndexDataConfig.model_validate(values)
@@ -25,6 +26,7 @@ def write_index_config(path: Path, **overrides: object) -> Path:
         "input_dir": path.parent,
         "volume_pattern": "{subject_id}_volume.nii.gz",
         "require_masks": False,
+        "source_id": "test-source",
     }
     values.update(overrides)
 
