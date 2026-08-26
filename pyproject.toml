@@ -1,33 +1,19 @@
 [project]
 name = "microbleednet"
 version = "2.0.0"
-description = "Research implementation of MicrobleedNet for cerebral microbleed detection"
-readme = "README.md"
 requires-python = ">=3.13,<3.14"
 dependencies = [
     "natsort>=8.4.0",
-    "nibabel>=5.4.2",
-    "numpy>=2.2.6",
     "pydantic>=2.11.0",
     "rich>=14.3.3",
-    "scikit-image>=0.25.2",
-    "scikit-learn>=1.7.2",
-    "scipy>=1.15.3",
-    "simpleitk>=2.5.4",
-    "torch>=2.11.0",
-    "torchvision>=0.26.0",
     "typer>=0.24.1",
-]
-
-[project.optional-dependencies]
-plots = [
-    "matplotlib>=3.9.0",
 ]
 
 [dependency-groups]
 dev = [
     "pyright>=1.1.390",
     "pytest>=8.3.0",
+    "pytest-cov>=6.0.0",
     "ruff>=0.9.0",
 ]
 
@@ -36,10 +22,24 @@ microbleednet = "microbleednet.cli.entrypoint:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = [
+    "--import-mode=importlib",
+    "--cov=microbleednet",
+    "--cov-report=term-missing:skip-covered",
+]
+strict_config = true
+strict_markers = true
+
+[tool.coverage.run]
+source = ["microbleednet"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 100
+show_missing = true
 
 [tool.ruff]
 target-version = "py313"
-line-length = 88
 
 [tool.ruff.lint]
 select = ["E", "F", "I"]
