@@ -27,7 +27,7 @@ from typing import Literal
 
 from pydantic import Field, ValidationError, model_validator
 
-from ..core.datamodels import FrozenModel
+from ..core.datamodels import FrozenModel, Modality
 from . import atomic_io
 
 SCHEMA_VERSION = 1
@@ -71,6 +71,9 @@ class RawSubject(FrozenModel):
     """One indexed subject: a volume and its optional lesion mask."""
 
     subject_id: str = Field(description="Unique subject identifier.")
+    source_id: str = Field(
+        description="Identifier of the source that contributed this subject.",
+    )
     volume_path: str = Field(description="Absolute path to the raw volume.")
     mask_path: str | None = Field(
         default=None, description="Absolute path to the lesion mask, if indexed."
@@ -88,9 +91,12 @@ class RawSource(FrozenModel):
     mask_pattern: str | None = Field(
         default=None, description="Pattern matching masks, if masks were indexed."
     )
-    source_id: str | None = Field(
-        default=None,
-        description="Namespace prepended to this source's subject IDs, if any.",
+    source_id: str = Field(
+        description="Namespace prepended to this source's subject IDs.",
+    )
+    modality: Modality = Field(
+        default="T2*-GRE",
+        description="Imaging modality used to select preprocessing operations.",
     )
     added_on: str = Field(description="ISO-8601 time this source was indexed.")
 

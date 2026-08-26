@@ -13,7 +13,7 @@ from pathlib import Path
 
 from pydantic import Field, model_validator
 
-from ..core.datamodels import FrozenModel
+from ..core.datamodels import FrozenModel, Modality
 
 # Token a volume/mask filename pattern must contain exactly once; the text it
 # matches becomes the subject ID. Shared by the index-data pipeline (which
@@ -53,19 +53,22 @@ class IndexDataConfig(FrozenModel):
         default=True,
         description="Require every volume to have a matching mask.",
     )
-    source_id: str | None = Field(
-        default=None,
+    source_id: str = Field(
         description=(
-            "Optional namespace prepended to each subject ID as "
+            "Namespace prepended to each subject ID as "
             "'{source_id}_{subject_id}'. Use it to keep subjects unique when "
             "indexing several sources into one dataset. "
             "Allowed characters: letters, digits, '-', '_'."
         ),
     )
+    modality: Modality = Field(
+        default="T2*-GRE",
+        description="Imaging modality of this source's volumes.",
+    )
 
     @model_validator(mode="after")
     def validate_source_id(self) -> "IndexDataConfig":
-        if self.source_id is not None and not SOURCE_ID_PATTERN.match(self.source_id):
+        if not SOURCE_ID_PATTERN.match(self.source_id):
             raise ValueError(
                 "source_id may contain only letters, digits, '-', and '_'"
             )
