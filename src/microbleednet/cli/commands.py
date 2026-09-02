@@ -21,7 +21,7 @@ from pydantic import BaseModel
 from rich.console import Console
 from rich.table import Table
 
-from ..orchestration.configs import IndexDataConfig
+from ..orchestration.configs import IndexDataConfig, PreprocessConfig
 from .utils import (
     config_fields,
     describe_hint,
@@ -50,12 +50,14 @@ def validate_index_data(settings: IndexDataConfig) -> None:
         require_dir(settings.label_dir, "label_dir")
 
 
+def validate_preprocess(settings: PreprocessConfig) -> None:
+    require_dir(settings.dataset_dir, "dataset_dir")
+
+
 SPECS: list[CommandSpec] = [
     CommandSpec(
         name="index-data",
-        help=(
-            "TODO: write a help message"
-        ),
+        help="TODO: write a help message",
         config=IndexDataConfig,
         pipe="index_data",
         preconditions=validate_index_data,
@@ -65,6 +67,19 @@ SPECS: list[CommandSpec] = [
         ),
         success_message=lambda s, _: (
             f"Indexed dataset manifests written under {s.dataset_dir}"
+        ),
+    ),
+    CommandSpec(
+        name="preprocess",
+        help="TODO: write a help message",
+        config=PreprocessConfig,
+        pipe="preprocess",
+        preconditions=validate_preprocess,
+        dry_run_message=lambda s: (
+            f"Preprocess configuration valid for {s.dataset_dir} (dry run)"
+        ),
+        success_message=lambda s, _: (
+            f"Preprocessed dataset written under {s.dataset_dir}"
         ),
     ),
 ]

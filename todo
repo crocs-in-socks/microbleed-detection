@@ -1,0 +1,18 @@
+Manifest collection representation
+
+Inference restoration
+
+- Restore inference outputs to the source image space using the original affine,
+  orientation transform, source shape, and crop bounds.
+
+Consider changing manifest collections from lists to dictionaries:
+
+- RawDatasetManifest.subjects: key by subject_id.
+- RawDatasetManifest.sources: key by source_id if sources are unique entities rather than ordered ingestion events.
+- PreprocessedDatasetManifest.subjects: key by subject_id.
+- Remove subject_id/source_id from values where the dictionary key makes the field redundant, unless retaining them improves standalone use of those models.
+- Make processing order explicit with sorted(...items()) rather than relying on insertion order.
+- Update consumers to use .values() or .items().
+- Increment SCHEMA_VERSION because this changes persisted JSON structure.
+- Provide migration support or require old manifests to be regenerated.
+- Decide whether externally authored JSON requires duplicate-key detection during parsing; normal JSON parsing collapses duplicate object keys before Pydantic validation.

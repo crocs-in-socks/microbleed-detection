@@ -22,3 +22,32 @@ class DatasetLayout(FrozenModel):
         description="Raw dataset manifest written by index-data, relative to the "
         "dataset directory.",
     )
+    preprocessed_manifest: Path = Field(
+        default=Path("manifests/preprocessed.json"),
+        description=(
+            "Preprocessed dataset manifest written by preprocess, relative to "
+            "the dataset directory."
+        ),
+    )
+    preprocessed_volumes_dir: Path = Field(
+        default=Path("preprocessed/volumes"),
+        description=(
+            "Directory for preprocessed volumes, relative to the dataset "
+            "directory."
+        ),
+    )
+    preprocessed_masks_dir: Path = Field(
+        default=Path("preprocessed/masks"),
+        description=(
+            "Directory for preprocessed masks, relative to the dataset "
+            "directory."
+        ),
+    )
+    volume_suffix: str = Field(
+        default=".nii.gz",
+        description="Filename suffix for a preprocessed volume.",
+    )
+    mask_suffix: str = Field(
+        default=".nii.gz",
+        description="Filename suffix for a preprocessed mask.",
+    )

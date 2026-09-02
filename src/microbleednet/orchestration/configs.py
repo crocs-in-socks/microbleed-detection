@@ -93,3 +93,9 @@ class IndexDataConfig(FrozenModel):
                 "require_masks = false to index volumes without masks"
             )
         return self
+
+
+class PreprocessConfig(FrozenModel):
+    dataset_dir: Path = Field(
+        description="Indexed dataset directory containing manifests/raw.json."
+    )

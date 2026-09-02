@@ -120,6 +120,26 @@ class RawDatasetManifest(Manifest):
         return self
 
 
+class PreprocessedSubject(FrozenModel):
+    """One subject produced by the preprocessing stage."""
+
+    subject_id: str = Field(description="Unique subject identifier.")
+    volume_path: str = Field(
+        description="Absolute path to the preprocessed volume."
+    )
+    mask_path: str | None = Field(
+        default=None,
+        description="Absolute path to the preprocessed mask, if present.",
+    )
+class PreprocessedDatasetManifest(Manifest):
+    """Manifest ``preprocess`` writes after preparing every subject."""
+
+    manifest_type: Literal["preprocessed_dataset"] = "preprocessed_dataset"
+    subjects: list[PreprocessedSubject] = Field(
+        description="Subjects produced by the preprocessing stage."
+    )
+
+
 def reject_duplicate_ids(subject_ids) -> None:
     seen: set[str] = set()
     for subject_id in subject_ids:
@@ -141,13 +161,11 @@ def write_manifest(path: Path, manifest: Manifest) -> None:
 def read_manifest[ManifestType: Manifest](
     path: Path,
     manifest_class: type[ManifestType],
-    *,
-    require_complete: bool = True,
 ) -> ManifestType:
     """Load and validate a manifest of ``manifest_class`` from ``path``.
 
     Rejects an unversioned or otherwise malformed manifest with an actionable
-    error, and (by default) refuses any manifest that is not ``complete``.
+    error, and refuses any manifest that is not ``complete``.
     """
     payload = atomic_io.read_json(path)
     if not isinstance(payload, dict) or "schema_version" not in payload:
@@ -159,7 +177,7 @@ def read_manifest[ManifestType: Manifest](
         manifest = manifest_class.model_validate(payload)
     except ValidationError as error:
         raise ValueError(f"invalid manifest at {path}:\n{error}") from error
-    if require_complete and manifest.status is not ManifestStatus.COMPLETE:
+    if manifest.status is not ManifestStatus.COMPLETE:
         raise ValueError(
             f"manifest at {path} has status {manifest.status.value!r}; "
             "a consumer may only read a complete manifest."

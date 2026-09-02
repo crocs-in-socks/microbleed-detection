@@ -25,8 +25,6 @@ def load_config(path: Path) -> dict[str, Any]:
             config = tomllib.load(config_file)
     except (OSError, ValueError) as error:
         raise ValueError(f"could not read configuration {path}: {error}") from error
-    if not isinstance(config, dict):
-        raise ValueError("configuration root must be an object")
     return config
 
 
