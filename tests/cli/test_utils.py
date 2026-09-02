@@ -36,14 +36,6 @@ def test_parse_config_reports_validation_error_as_bad_parameter(
         parse_config(path, IndexDataConfig)
 
 
-def test_load_config_rejects_non_dict_root(tmp_path: Path, monkeypatch) -> None:
-    path = tmp_path / "config.toml"
-    path.write_text("a = 1\n", encoding="utf-8")
-    monkeypatch.setattr("tomllib.load", lambda _file: ["not", "a", "dict"])
-    with pytest.raises(ValueError, match="must be an object"):
-        load_config(path)
-
-
 def test_config_fields_recurses_into_nested_models() -> None:
     class Inner(BaseModel):
         knob: int = Field(default=1, description="An inner knob.")

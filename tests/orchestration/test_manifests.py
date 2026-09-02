@@ -56,7 +56,7 @@ def test_read_manifest_rejects_unversioned_payload(tmp_path: Path) -> None:
         read_manifest(path, RawDatasetManifest)
 
 
-def test_read_manifest_rejects_incomplete_status_by_default(tmp_path: Path) -> None:
+def test_read_manifest_rejects_incomplete_status(tmp_path: Path) -> None:
     path = tmp_path / "raw.json"
     atomic_io.write_json_atomic(
         path,

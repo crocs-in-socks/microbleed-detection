@@ -18,6 +18,18 @@ def test_source_id_rejects_unsafe_values(tmp_path, source_id: str) -> None:
         make_index_config(tmp_path, source_id=source_id)
 
 
+def test_source_id_is_required(tmp_path) -> None:
+    with pytest.raises(ValidationError, match="source_id"):
+        IndexDataConfig.model_validate(
+            {
+                "dataset_dir": tmp_path / "dataset",
+                "input_dir": tmp_path,
+                "volume_pattern": "{subject_id}.nii.gz",
+                "require_masks": False,
+            }
+        )
+
+
 @pytest.mark.parametrize(
     ("overrides", "field"),
     [
