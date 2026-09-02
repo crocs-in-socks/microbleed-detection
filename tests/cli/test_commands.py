@@ -133,6 +133,32 @@ def test_index_data_rejects_unmatched_subjects_when_masks_required(
     assert "unmatched subjects" in str(result.exception)
 
 
+def test_preprocess_dry_run_accepts_indexed_dataset(tmp_path: Path) -> None:
+    config_path = tmp_path / "preprocess.toml"
+    config_path.write_text(
+        f"dataset_dir = {json.dumps(str(tmp_path))}\n", encoding="utf-8"
+    )
+
+    result = runner.invoke(
+        app, ["preprocess", "--config", str(config_path), "--dry-run"]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "dry run" in result.output
+
+
+def test_preprocess_rejects_missing_dataset_dir(tmp_path: Path) -> None:
+    config_path = tmp_path / "preprocess.toml"
+    config_path.write_text(
+        f"dataset_dir = {json.dumps(str(tmp_path / 'missing'))}\n", encoding="utf-8"
+    )
+
+    result = runner.invoke(app, ["preprocess", "--config", str(config_path)])
+
+    assert result.exit_code != 0
+    assert "dataset_dir" in result.output
+
+
 def _run_index_data(
     tmp_path: Path,
     dataset_dir: Path,
