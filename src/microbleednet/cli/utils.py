@@ -2,8 +2,7 @@
 
 The commands are generated from a declarative table in ``cli/commands.py`` and
 wired up by ``entrypoint.py``. Everything they need but do not own — config
-loading and parsing, precondition checks, config-key introspection, and output —
-lives here.
+loading and parsing, config-key introspection, and output — lives here.
 """
 
 import tomllib
@@ -75,12 +74,6 @@ def config_fields(model: type[BaseModel], prefix: str = "") -> list[ConfigField]
             )
         )
     return fields
-
-
-def require_dir(path: Path, label: str) -> None:
-    """Raise a clean CLI error unless ``path`` is an existing directory."""
-    if not path.is_dir():
-        raise typer.BadParameter(f"{label} does not exist: {path}")
 
 
 def describe_hint(command: str) -> str:

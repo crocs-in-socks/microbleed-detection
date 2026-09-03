@@ -1,17 +1,17 @@
 """Table-driven construction of the CLI commands.
 
-Every command is the same skeleton — parse a config, check preconditions, honor
+Every command is the same skeleton — parse a config, honor
 ``--dry-run``, defer-import one pipe, run it, report — so each is described
 declaratively by a :class:`CommandSpec` and built by :func:`build_command`
 rather than hand-written in its own module. Only the per-command specifics
-(config model, help text, preconditions, messages, and which pipe to run)
+(config model, help text, messages, and which pipe to run)
 vary, and those are exactly the spec's fields.
 
 The pipe is imported lazily inside the command body, by module name, so
 ``--help`` and ``describe`` never pay to import torch.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from importlib import import_module
 from pathlib import Path
 from typing import Annotated, Any, Callable
@@ -27,7 +27,6 @@ from .utils import (
     describe_hint,
     parse_config,
     report,
-    require_dir,
 )
 
 
@@ -41,26 +40,12 @@ class CommandSpec:
     pipe: str  # module under orchestration.pipes; imported lazily to defer torch
     dry_run_message: Callable[[Any], str]
     success_message: Callable[[Any, Any], str]
-    preconditions: Callable[[Any], None] = field(default=lambda settings: None)
-
-
-def validate_index_data(settings: IndexDataConfig) -> None:
-    require_dir(settings.input_dir, "input_dir")
-    if settings.label_dir is not None:
-        require_dir(settings.label_dir, "label_dir")
-
-
-def validate_preprocess(settings: PreprocessConfig) -> None:
-    require_dir(settings.dataset_dir, "dataset_dir")
-
-
 SPECS: list[CommandSpec] = [
     CommandSpec(
         name="index-data",
         help="TODO: write a help message",
         config=IndexDataConfig,
         pipe="index_data",
-        preconditions=validate_index_data,
         dry_run_message=lambda s: (
             f"Index configuration valid; manifests would be written under "
             f"{s.dataset_dir} (dry run)"
@@ -74,7 +59,6 @@ SPECS: list[CommandSpec] = [
         help="TODO: write a help message",
         config=PreprocessConfig,
         pipe="preprocess",
-        preconditions=validate_preprocess,
         dry_run_message=lambda s: (
             f"Preprocess configuration valid for {s.dataset_dir} (dry run)"
         ),
@@ -100,7 +84,6 @@ def build_command(app: typer.Typer, spec: CommandSpec) -> None:
         ] = False,
     ) -> None:
         settings = parse_config(config, spec.config)
-        spec.preconditions(settings)
         if dry_run:
             report(spec.dry_run_message(settings))
             return

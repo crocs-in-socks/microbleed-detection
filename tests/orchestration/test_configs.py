@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from microbleednet.orchestration.configs import IndexDataConfig
+from microbleednet.orchestration.configs import IndexDataConfig, PreprocessConfig
 from tests.support import make_index_config
 
 
@@ -71,3 +71,18 @@ def test_label_dir_required_when_masks_are_required(tmp_path) -> None:
             volume_pattern="{subject_id}.nii.gz",
             source_id="test-source",
         )
+
+
+def test_index_config_rejects_missing_input_dir(tmp_path) -> None:
+    with pytest.raises(ValidationError, match="input_dir"):
+        make_index_config(tmp_path, input_dir=tmp_path / "missing")
+
+
+def test_index_config_rejects_missing_label_dir(tmp_path) -> None:
+    with pytest.raises(ValidationError, match="label_dir"):
+        make_index_config(tmp_path, label_dir=tmp_path / "missing")
+
+
+def test_preprocess_config_rejects_missing_dataset_dir(tmp_path) -> None:
+    with pytest.raises(ValidationError, match="dataset_dir"):
+        PreprocessConfig(dataset_dir=tmp_path / "missing")
