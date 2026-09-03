@@ -1,11 +1,10 @@
 """Top-level command configs the orchestration layer consumes.
 
 Each pipe's ``execute()`` takes one of these config objects whole. They live
-here because the orchestration layer owns them; the CLI imports them back so its
-command table can validate configs against them, which keeps the dependency
-direction ``cli -> orchestration`` intact. Loading a config from a TOML file is a
-CLI concern (``cli/utils.py``); the pipes only ever receive an already-validated
-object.
+here because the orchestration layer owns them; the CLI imports them to parse
+TOML into already-validated objects, which keeps the dependency direction
+``cli -> orchestration`` intact. Loading a config from a TOML file is a CLI
+concern (``cli/utils.py``).
 """
 
 import re
@@ -94,8 +93,22 @@ class IndexDataConfig(FrozenModel):
             )
         return self
 
+    @model_validator(mode="after")
+    def validate_directories(self) -> "IndexDataConfig":
+        if not self.input_dir.is_dir():
+            raise ValueError(f"input_dir does not exist: {self.input_dir}")
+        if self.label_dir is not None and not self.label_dir.is_dir():
+            raise ValueError(f"label_dir does not exist: {self.label_dir}")
+        return self
+
 
 class PreprocessConfig(FrozenModel):
     dataset_dir: Path = Field(
         description="Indexed dataset directory containing manifests/raw.json."
     )
+
+    @model_validator(mode="after")
+    def validate_dataset_dir(self) -> "PreprocessConfig":
+        if not self.dataset_dir.is_dir():
+            raise ValueError(f"dataset_dir does not exist: {self.dataset_dir}")
+        return self
