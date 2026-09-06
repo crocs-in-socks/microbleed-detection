@@ -22,8 +22,8 @@ def execute(config: IndexDataConfig) -> None:
     now = manifests.timestamp()
     source, subjects, unmatched_volumes, unmatched_masks = index_source(config, now)
 
-    layout = DatasetLayout()
-    manifest_path = config.dataset_dir / layout.raw_manifest
+    layout = DatasetLayout(dataset_dir=config.dataset_dir)
+    manifest_path = layout.raw_manifest_path()
     existing = (
         manifests.read_manifest(manifest_path, RawDatasetManifest)
         if manifest_path.is_file()

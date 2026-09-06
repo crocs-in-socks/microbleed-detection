@@ -15,32 +15,32 @@ from ..core.datamodels import FrozenModel
 
 
 class DatasetLayout(FrozenModel):
-    """Relative paths of an indexed dataset directory."""
+    """Paths within an indexed dataset directory."""
+
+    dataset_dir: Path = Field(
+        description="Root directory for this dataset's artifacts."
+    )
 
     raw_manifest: Path = Field(
         default=Path("manifests/raw.json"),
-        description="Raw dataset manifest written by index-data, relative to the "
-        "dataset directory.",
+        description="Raw dataset manifest written by index-data.",
     )
     preprocessed_manifest: Path = Field(
         default=Path("manifests/preprocessed.json"),
         description=(
-            "Preprocessed dataset manifest written by preprocess, relative to "
-            "the dataset directory."
+            "Preprocessed dataset manifest written by preprocess."
         ),
     )
     preprocessed_volumes_dir: Path = Field(
         default=Path("preprocessed/volumes"),
         description=(
-            "Directory for preprocessed volumes, relative to the dataset "
-            "directory."
+            "Directory for preprocessed volumes."
         ),
     )
     preprocessed_masks_dir: Path = Field(
         default=Path("preprocessed/masks"),
         description=(
-            "Directory for preprocessed masks, relative to the dataset "
-            "directory."
+            "Directory for preprocessed masks."
         ),
     )
     volume_suffix: str = Field(
@@ -51,3 +51,15 @@ class DatasetLayout(FrozenModel):
         default=".nii.gz",
         description="Filename suffix for a preprocessed mask.",
     )
+
+    def raw_manifest_path(self) -> Path:
+        return self.dataset_dir / self.raw_manifest
+
+    def preprocessed_manifest_path(self) -> Path:
+        return self.dataset_dir / self.preprocessed_manifest
+
+    def preprocessed_volumes_path(self) -> Path:
+        return self.dataset_dir / self.preprocessed_volumes_dir
+
+    def preprocessed_masks_path(self) -> Path:
+        return self.dataset_dir / self.preprocessed_masks_dir

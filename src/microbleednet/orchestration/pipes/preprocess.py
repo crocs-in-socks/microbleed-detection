@@ -17,15 +17,15 @@ from ..manifests import (
 
 
 def execute(config: PreprocessConfig) -> None:
-    layout = DatasetLayout()
+    layout = DatasetLayout(dataset_dir=config.dataset_dir)
     raw_manifest = manifests.read_manifest(
-        config.dataset_dir / layout.raw_manifest, RawDatasetManifest
+        layout.raw_manifest_path(), RawDatasetManifest
     )
 
-    volumes_dir = config.dataset_dir / layout.preprocessed_volumes_dir
+    volumes_dir = layout.preprocessed_volumes_path()
     volumes_dir.mkdir(parents=True, exist_ok=True)
 
-    masks_dir = config.dataset_dir / layout.preprocessed_masks_dir
+    masks_dir = layout.preprocessed_masks_path()
     masks_dir.mkdir(parents=True, exist_ok=True)
 
     source_modalities = {
@@ -85,5 +85,5 @@ def execute(config: PreprocessConfig) -> None:
         subjects=preprocessed_subjects,
     )
     manifests.write_manifest(
-        config.dataset_dir / layout.preprocessed_manifest, preprocessed_manifest
+        layout.preprocessed_manifest_path(), preprocessed_manifest
     )
