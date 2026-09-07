@@ -24,11 +24,7 @@ def execute(config: IndexDataConfig) -> None:
 
     layout = DatasetLayout(dataset_dir=config.dataset_dir)
     manifest_path = layout.raw_manifest_path()
-    existing = (
-        manifests.read_manifest(manifest_path, RawDatasetManifest)
-        if manifest_path.is_file()
-        else None
-    )
+    existing = RawDatasetManifest.read(manifest_path) if manifest_path.is_file() else None
 
     raw_manifest = merge_source(
         existing,
@@ -38,7 +34,7 @@ def execute(config: IndexDataConfig) -> None:
         unmatched_masks=unmatched_masks,
         now=now,
     )
-    manifests.write_manifest(manifest_path, raw_manifest)
+    raw_manifest.write(manifest_path)
 
 
 def index_source(

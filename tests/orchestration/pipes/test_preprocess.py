@@ -13,9 +13,7 @@ from microbleednet.orchestration.manifests import (
     RawDatasetManifest,
     RawSource,
     RawSubject,
-    read_manifest,
     timestamp,
-    write_manifest,
 )
 from microbleednet.orchestration.pipes import preprocess
 
@@ -62,7 +60,7 @@ def _write_raw_dataset(dataset_dir: Path, with_unmasked_subject: bool = True) ->
         subjects=subjects,
     )
     layout = DatasetLayout(dataset_dir=dataset_dir)
-    write_manifest(layout.raw_manifest_path(), manifest)
+    manifest.write(layout.raw_manifest_path())
 
 
 def test_execute_writes_volumes_masks_and_complete_manifest(
@@ -81,9 +79,7 @@ def test_execute_writes_volumes_masks_and_complete_manifest(
     preprocess.execute(PreprocessConfig(dataset_dir=dataset_dir))
 
     layout = DatasetLayout(dataset_dir=dataset_dir)
-    manifest = read_manifest(
-        layout.preprocessed_manifest_path(), PreprocessedDatasetManifest
-    )
+    manifest = PreprocessedDatasetManifest.read(layout.preprocessed_manifest_path())
     assert manifest.status is ManifestStatus.COMPLETE
     assert [subject.subject_id for subject in manifest.subjects] == [
         "source_masked",

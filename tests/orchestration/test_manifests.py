@@ -8,7 +8,6 @@ from microbleednet.orchestration.manifests import (
     Manifest,
     ManifestStatus,
     RawDatasetManifest,
-    read_manifest,
     timestamp,
 )
 
@@ -53,7 +52,7 @@ def test_read_manifest_rejects_unversioned_payload(tmp_path: Path) -> None:
     path = tmp_path / "raw.json"
     atomic_io.write_json_atomic(path, {"status": "complete"})
     with pytest.raises(ValueError, match="not a versioned manifest"):
-        read_manifest(path, RawDatasetManifest)
+        RawDatasetManifest.read(path)
 
 
 def test_read_manifest_rejects_incomplete_status(tmp_path: Path) -> None:
@@ -68,7 +67,7 @@ def test_read_manifest_rejects_incomplete_status(tmp_path: Path) -> None:
         ),
     )
     with pytest.raises(ValueError, match="a consumer may only read a complete"):
-        read_manifest(path, RawDatasetManifest)
+        RawDatasetManifest.read(path)
 
 
 def test_read_manifest_rejects_payload_that_fails_schema_validation(
@@ -78,4 +77,4 @@ def test_read_manifest_rejects_payload_that_fails_schema_validation(
     # schema_version is present, but required manifest fields are missing.
     atomic_io.write_json_atomic(path, _envelope())
     with pytest.raises(ValueError, match="invalid manifest at"):
-        read_manifest(path, RawDatasetManifest)
+        RawDatasetManifest.read(path)
