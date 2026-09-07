@@ -18,9 +18,7 @@ from ..manifests import (
 
 def execute(config: PreprocessConfig) -> None:
     layout = DatasetLayout(dataset_dir=config.dataset_dir)
-    raw_manifest = manifests.read_manifest(
-        layout.raw_manifest_path(), RawDatasetManifest
-    )
+    raw_manifest = RawDatasetManifest.read(layout.raw_manifest_path())
 
     volumes_dir = layout.preprocessed_volumes_path()
     volumes_dir.mkdir(parents=True, exist_ok=True)
@@ -84,6 +82,4 @@ def execute(config: PreprocessConfig) -> None:
         updated_at=now,
         subjects=preprocessed_subjects,
     )
-    manifests.write_manifest(
-        layout.preprocessed_manifest_path(), preprocessed_manifest
-    )
+    preprocessed_manifest.write(layout.preprocessed_manifest_path())

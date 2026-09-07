@@ -66,6 +66,32 @@ class Manifest(FrozenModel):
             raise ValueError("only a failed manifest may carry an error string")
         return self
 
+    def write(self, path: Path) -> None:
+        """Serialize this manifest to ``path`` atomically as versioned JSON."""
+        atomic_io.write_json_atomic(path, self.model_dump(mode="json"))
+
+    @classmethod
+    def read[ManifestType: Manifest](
+        cls: type[ManifestType], path: Path
+    ) -> ManifestType:
+        """Load and validate a complete manifest from ``path``."""
+        payload = atomic_io.read_json(path)
+        if not isinstance(payload, dict) or "schema_version" not in payload:
+            raise ValueError(
+                f"{path} is not a versioned manifest; regenerate it with the current "
+                "pipeline (it predates the schema_version contract)."
+            )
+        try:
+            manifest = cls.model_validate(payload)
+        except ValidationError as error:
+            raise ValueError(f"invalid manifest at {path}:\n{error}") from error
+        if manifest.status is not ManifestStatus.COMPLETE:
+            raise ValueError(
+                f"manifest at {path} has status {manifest.status.value!r}; "
+                "a consumer may only read a complete manifest."
+            )
+        return manifest
+
 
 class RawSubject(FrozenModel):
     """One indexed subject: a volume and its optional lesion mask."""
@@ -153,33 +179,3 @@ def timestamp() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def write_manifest(path: Path, manifest: Manifest) -> None:
-    """Serialize ``manifest`` to ``path`` atomically as versioned JSON."""
-    atomic_io.write_json_atomic(path, manifest.model_dump(mode="json"))
-
-
-def read_manifest[ManifestType: Manifest](
-    path: Path,
-    manifest_class: type[ManifestType],
-) -> ManifestType:
-    """Load and validate a manifest of ``manifest_class`` from ``path``.
-
-    Rejects an unversioned or otherwise malformed manifest with an actionable
-    error, and refuses any manifest that is not ``complete``.
-    """
-    payload = atomic_io.read_json(path)
-    if not isinstance(payload, dict) or "schema_version" not in payload:
-        raise ValueError(
-            f"{path} is not a versioned manifest; regenerate it with the current "
-            "pipeline (it predates the schema_version contract)."
-        )
-    try:
-        manifest = manifest_class.model_validate(payload)
-    except ValidationError as error:
-        raise ValueError(f"invalid manifest at {path}:\n{error}") from error
-    if manifest.status is not ManifestStatus.COMPLETE:
-        raise ValueError(
-            f"manifest at {path} has status {manifest.status.value!r}; "
-            "a consumer may only read a complete manifest."
-        )
-    return manifest
