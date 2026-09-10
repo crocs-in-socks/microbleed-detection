@@ -25,7 +25,8 @@ def test_source_id_is_required(tmp_path) -> None:
                 "dataset_dir": tmp_path / "dataset",
                 "input_dir": tmp_path,
                 "volume_pattern": "{subject_id}.nii.gz",
-                "require_masks": False,
+                "label_dir": tmp_path / "masks",
+                "mask_pattern": "{subject_id}.nii.gz",
             }
         )
 
@@ -58,13 +59,8 @@ def test_pattern_accepts_multiple_subject_id_placeholders(tmp_path) -> None:
     assert config.volume_pattern == pattern
 
 
-def test_mask_pattern_required_when_label_dir_given(tmp_path) -> None:
-    with pytest.raises(ValidationError, match="mask_pattern is required"):
-        make_index_config(tmp_path, label_dir=tmp_path)
-
-
-def test_label_dir_required_when_masks_are_required(tmp_path) -> None:
-    with pytest.raises(ValidationError, match="label_dir is required"):
+def test_mask_inputs_are_required(tmp_path) -> None:
+    with pytest.raises(ValidationError, match="label_dir|mask_pattern"):
         IndexDataConfig(
             dataset_dir=tmp_path / "dataset",
             input_dir=tmp_path,

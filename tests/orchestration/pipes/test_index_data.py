@@ -61,10 +61,14 @@ def test_build_subject_map_rejects_duplicate_subject_id(tmp_path: Path) -> None:
 def test_index_source_sorts_naturally_and_namespaces_subjects(tmp_path: Path) -> None:
     source_dir = create_volume_source(tmp_path, "source", ["subject_10", "subject_2"])
     config = make_index_config(
-        tmp_path, input_dir=source_dir, source_id="siteA", modality="SWI"
+        tmp_path,
+        input_dir=source_dir,
+        label_dir=tmp_path / "source_masks",
+        source_id="siteA",
+        modality="SWI",
     )
 
-    source, subjects, unmatched_volumes, unmatched_masks = index_source(
+    source, subjects = index_source(
         config, "2026-01-01T00:00:00+00:00"
     )
 
@@ -75,8 +79,6 @@ def test_index_source_sorts_naturally_and_namespaces_subjects(tmp_path: Path) ->
     assert source.source_id == "siteA"
     assert source.modality == "SWI"
     assert {subject.source_id for subject in subjects} == {"siteA"}
-    assert set(unmatched_volumes) == {"siteA_subject_2", "siteA_subject_10"}
-    assert unmatched_masks == []
 
 
 def test_merge_source_preserves_creation_and_combines_state() -> None:
@@ -91,9 +93,9 @@ def test_merge_source_preserves_creation_and_combines_state() -> None:
                 subject_id="subject_10",
                 source_id="first",
                 volume_path="/subject_10",
+                mask_path="/mask_10",
             )
         ],
-        unmatched_volumes=["subject_10"],
     )
     new_source = _source("second", "2026-01-02T00:00:00+00:00")
 
@@ -105,10 +107,9 @@ def test_merge_source_preserves_creation_and_combines_state() -> None:
                 subject_id="subject_2",
                 source_id="second",
                 volume_path="/subject_2",
+                mask_path="/mask_2",
             )
         ],
-        unmatched_volumes=["subject_2"],
-        unmatched_masks=["mask_only"],
         now="2026-01-02T00:00:00+00:00",
     )
 
@@ -118,14 +119,14 @@ def test_merge_source_preserves_creation_and_combines_state() -> None:
         "subject_2",
         "subject_10",
     ]
-    assert merged.unmatched_volumes == ["subject_10", "subject_2"]
-    assert merged.unmatched_masks == ["mask_only"]
 
 
 def _source(name: str, added_on: str) -> RawSource:
     return RawSource(
         input_dir=f"/{name}",
+        label_dir=f"/{name}-masks",
         volume_pattern="{subject_id}_volume.nii.gz",
+        mask_pattern="{subject_id}_mask.nii.gz",
         source_id=name,
         added_on=added_on,
     )

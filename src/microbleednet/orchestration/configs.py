@@ -37,20 +37,14 @@ class IndexDataConfig(FrozenModel):
             f"Must contain the '{SUBJECT_ID_PLACEHOLDER}' placeholder."
         ),
     )
-    label_dir: Path | None = Field(
-        default=None,
-        description="Label directory containing masks to index.",
+    label_dir: Path = Field(
+        description="Label directory containing the masks to index.",
     )
-    mask_pattern: str | None = Field(
-        default=None,
+    mask_pattern: str = Field(
         description=(
             "Naming pattern of masks in the label directory. "
-            f"Must contain the '{SUBJECT_ID_PLACEHOLDER}' placeholder. "
+            f"Must contain the '{SUBJECT_ID_PLACEHOLDER}' placeholder."
         ),
-    )
-    require_masks: bool = Field(
-        default=True,
-        description="Require every volume to have a matching mask.",
     )
     source_id: str = Field(
         description=(
@@ -84,20 +78,13 @@ class IndexDataConfig(FrozenModel):
                     f"{name} must contain the '{SUBJECT_ID_PLACEHOLDER}' "
                     "placeholder at least once"
                 )
-        if self.label_dir is not None and self.mask_pattern is None:
-            raise ValueError("mask_pattern is required when label_dir is provided")
-        if self.label_dir is None and self.require_masks:
-            raise ValueError(
-                "label_dir is required when require_masks is true; set "
-                "require_masks = false to index volumes without masks"
-            )
         return self
 
     @model_validator(mode="after")
     def validate_directories(self) -> "IndexDataConfig":
         if not self.input_dir.is_dir():
             raise ValueError(f"input_dir does not exist: {self.input_dir}")
-        if self.label_dir is not None and not self.label_dir.is_dir():
+        if not self.label_dir.is_dir():
             raise ValueError(f"label_dir does not exist: {self.label_dir}")
         return self
 

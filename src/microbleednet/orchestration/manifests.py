@@ -101,22 +101,16 @@ class RawSubject(FrozenModel):
         description="Identifier of the source that contributed this subject.",
     )
     volume_path: str = Field(description="Absolute path to the raw volume.")
-    mask_path: str | None = Field(
-        default=None, description="Absolute path to the lesion mask, if indexed."
-    )
+    mask_path: str = Field(description="Absolute path to the lesion mask.")
 
 
 class RawSource(FrozenModel):
     """A directory pair and filename patterns that contributed subjects."""
 
     input_dir: str = Field(description="Directory the volumes were indexed from.")
-    label_dir: str | None = Field(
-        default=None, description="Directory the masks were indexed from, if any."
-    )
+    label_dir: str = Field(description="Directory the masks were indexed from.")
     volume_pattern: str = Field(description="Glob/regex pattern matching volumes.")
-    mask_pattern: str | None = Field(
-        default=None, description="Pattern matching masks, if masks were indexed."
-    )
+    mask_pattern: str = Field(description="Pattern matching masks.")
     source_id: str = Field(
         description="Namespace prepended to this source's subject IDs.",
     )
@@ -133,12 +127,6 @@ class RawDatasetManifest(Manifest):
     manifest_type: Literal["raw_dataset"] = "raw_dataset"
     sources: list[RawSource] = Field(description="Sources that contributed subjects.")
     subjects: list[RawSubject] = Field(description="Indexed subjects.")
-    unmatched_volumes: list[str] = Field(
-        default_factory=list, description="Subject IDs with a volume but no mask."
-    )
-    unmatched_masks: list[str] = Field(
-        default_factory=list, description="Subject IDs with a mask but no volume."
-    )
 
     @model_validator(mode="after")
     def unique_subjects(self) -> "RawDatasetManifest":
