@@ -2,7 +2,6 @@ from pathlib import Path
 
 import nibabel as nib
 import numpy as np
-import pytest
 
 from microbleednet.core.datamodels import PreprocessResult
 from microbleednet.orchestration.configs import PreprocessConfig
@@ -78,18 +77,3 @@ def test_execute_writes_volumes_masks_and_complete_manifest(
     for subject in manifest.subjects:
         assert Path(subject.volume_path).is_file()
         assert Path(subject.mask_path).is_file()
-
-
-def test_execute_rejects_missing_processed_mask(tmp_path: Path, monkeypatch) -> None:
-    dataset_dir = tmp_path / "dataset"
-    _write_raw_dataset(dataset_dir)
-    monkeypatch.setattr(
-        preprocess.processor,
-        "preprocess",
-        lambda volume, mask, modality: PreprocessResult(
-            np.ones((1, 1, 1)), None, np.eye(4)
-        ),
-    )
-
-    with pytest.raises(ValueError, match="returned no mask for source_masked"):
-        preprocess.execute(PreprocessConfig(dataset_dir=dataset_dir))

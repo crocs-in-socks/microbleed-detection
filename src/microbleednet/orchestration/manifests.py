@@ -141,10 +141,7 @@ class PreprocessedSubject(FrozenModel):
     volume_path: str = Field(
         description="Absolute path to the preprocessed volume."
     )
-    mask_path: str | None = Field(
-        default=None,
-        description="Absolute path to the preprocessed mask, if present.",
-    )
+    mask_path: str = Field(description="Absolute path to the preprocessed mask.")
 class PreprocessedDatasetManifest(Manifest):
     """Manifest ``preprocess`` writes after preparing every subject."""
 

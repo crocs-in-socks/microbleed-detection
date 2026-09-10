@@ -18,6 +18,7 @@ from ..core.datamodels import FrozenModel, Modality
 # matches becomes the subject ID. Shared by the index-data pipeline (which
 # splits filenames on it) and IndexDataConfig (which validates its presence).
 SUBJECT_ID_PLACEHOLDER = "{subject_id}"
+SOURCE_ID_PLACEHOLDER = "{source_id}"
 
 # A source_id namespaces subject IDs and becomes part of on-disk paths, so it is
 # restricted to filesystem-safe characters.
@@ -49,7 +50,8 @@ class IndexDataConfig(FrozenModel):
     source_id: str = Field(
         description=(
             "Namespace prepended to each subject ID as "
-            "'{source_id}_{subject_id}'. Use it to keep subjects unique when "
+            f"'{SOURCE_ID_PLACEHOLDER}_{SUBJECT_ID_PLACEHOLDER}'. "
+            "Use it to keep subjects unique when "
             "indexing several sources into one dataset. "
             "Allowed characters: letters, digits, '-', '_'."
         ),
@@ -63,7 +65,8 @@ class IndexDataConfig(FrozenModel):
     def validate_source_id(self) -> "IndexDataConfig":
         if not SOURCE_ID_PATTERN.match(self.source_id):
             raise ValueError(
-                "source_id may contain only letters, digits, '-', and '_'"
+                f"{SOURCE_ID_PLACEHOLDER} may contain only letters, digits, "
+                "'-', and '_'"
             )
         return self
 

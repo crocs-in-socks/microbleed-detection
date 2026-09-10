@@ -32,10 +32,11 @@ def _stub_processing_steps(monkeypatch) -> tuple[Mock, Mock]:
 
 def test_preprocess_qsm_skips_contrast_operations(monkeypatch) -> None:
     bias_correct, invert = _stub_processing_steps(monkeypatch)
+    mask = nib.Nifti1Image(np.ones((2, 2, 2), dtype=np.uint8), np.eye(4))
 
-    result = processor.preprocess(_volume(), None, "QSM")
+    result = processor.preprocess(_volume(), mask, "QSM")
 
-    assert result.mask is None
+    assert result.mask.dtype == np.uint8
     np.testing.assert_array_equal(result.image, np.ones((2, 2, 2)))
     np.testing.assert_array_equal(result.affine, np.eye(4))
     bias_correct.assert_not_called()

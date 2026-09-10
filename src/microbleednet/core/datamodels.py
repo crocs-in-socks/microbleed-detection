@@ -21,7 +21,7 @@ class FrozenModel(BaseModel):
 @dataclass(frozen=True)
 class PreprocessResult:
     image: FloatArray
-    mask: IntArray | None
+    mask: IntArray
     affine: FloatArray
 
     def __post_init__(self) -> None:
@@ -29,5 +29,5 @@ class PreprocessResult:
             raise ValueError("image must be a 3D array")
         if not np.isfinite(self.image).all():
             raise ValueError("image must contain only finite values")
-        if self.mask is not None and self.mask.shape != self.image.shape:
+        if self.mask.shape != self.image.shape:
             raise ValueError("mask must match image shape")

@@ -38,10 +38,8 @@ def execute(config: IndexDataConfig) -> None:
 def index_source(
     config: IndexDataConfig, now: str
 ) -> tuple[RawSource, list[RawSubject]]:
-    """Index one input/label directory pair into a source and its subjects.
-
-    Volume/mask matching happens within this single source; accumulation across
-    sources is handled by :func:`merge_source`.
+    """
+    Index one input/label directory pair into a source and its subjects.
     """
     volume_paths = compute_paths(config.input_dir, config.volume_pattern)
     mask_paths = compute_paths(config.label_dir, config.mask_pattern)
@@ -107,7 +105,7 @@ def merge_source(
         raise ValueError(
             "subjects already indexed in this dataset: "
             f"{sorted(collisions)}; index them into a fresh dataset directory "
-            "or add a source_id."
+            "or use a different source_id."
         )
 
     return RawDatasetManifest(
@@ -128,9 +126,9 @@ def build_subject_map(
 ) -> dict[str, Path]:
     subject_map: dict[str, Path] = {}
     for path in paths:
-        subject_id = extract_subject_id(root_dir, path, pattern)
-        if subject_id is None or not subject_id.strip():
-            raise ValueError(f"path does not match pattern or has an empty ID: {path}")
+        subject_id = extract_subject_id(root_dir, path, pattern) or ""
+        if not subject_id.strip():
+            raise ValueError(f"path has an empty ID: {path}")
         if subject_id in subject_map:
             raise ValueError(f"duplicate subject ID '{subject_id}' in {root_dir}")
         subject_map[subject_id] = path
