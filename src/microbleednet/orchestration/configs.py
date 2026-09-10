@@ -18,6 +18,7 @@ from ..core.datamodels import FrozenModel, Modality
 # matches becomes the subject ID. Shared by the index-data pipeline (which
 # splits filenames on it) and IndexDataConfig (which validates its presence).
 SUBJECT_ID_PLACEHOLDER = "{subject_id}"
+SOURCE_ID_PLACEHOLDER = "{source_id}"
 
 # A source_id namespaces subject IDs and becomes part of on-disk paths, so it is
 # restricted to filesystem-safe characters.
@@ -37,25 +38,20 @@ class IndexDataConfig(FrozenModel):
             f"Must contain the '{SUBJECT_ID_PLACEHOLDER}' placeholder."
         ),
     )
-    label_dir: Path | None = Field(
-        default=None,
-        description="Label directory containing masks to index.",
+    label_dir: Path = Field(
+        description="Label directory containing the masks to index.",
     )
-    mask_pattern: str | None = Field(
-        default=None,
+    mask_pattern: str = Field(
         description=(
             "Naming pattern of masks in the label directory. "
-            f"Must contain the '{SUBJECT_ID_PLACEHOLDER}' placeholder. "
+            f"Must contain the '{SUBJECT_ID_PLACEHOLDER}' placeholder."
         ),
-    )
-    require_masks: bool = Field(
-        default=True,
-        description="Require every volume to have a matching mask.",
     )
     source_id: str = Field(
         description=(
             "Namespace prepended to each subject ID as "
-            "'{source_id}_{subject_id}'. Use it to keep subjects unique when "
+            f"'{SOURCE_ID_PLACEHOLDER}_{SUBJECT_ID_PLACEHOLDER}'. "
+            "Use it to keep subjects unique when "
             "indexing several sources into one dataset. "
             "Allowed characters: letters, digits, '-', '_'."
         ),
@@ -69,7 +65,8 @@ class IndexDataConfig(FrozenModel):
     def validate_source_id(self) -> "IndexDataConfig":
         if not SOURCE_ID_PATTERN.match(self.source_id):
             raise ValueError(
-                "source_id may contain only letters, digits, '-', and '_'"
+                f"{SOURCE_ID_PLACEHOLDER} may contain only letters, digits, "
+                "'-', and '_'"
             )
         return self
 
@@ -84,20 +81,13 @@ class IndexDataConfig(FrozenModel):
                     f"{name} must contain the '{SUBJECT_ID_PLACEHOLDER}' "
                     "placeholder at least once"
                 )
-        if self.label_dir is not None and self.mask_pattern is None:
-            raise ValueError("mask_pattern is required when label_dir is provided")
-        if self.label_dir is None and self.require_masks:
-            raise ValueError(
-                "label_dir is required when require_masks is true; set "
-                "require_masks = false to index volumes without masks"
-            )
         return self
 
     @model_validator(mode="after")
     def validate_directories(self) -> "IndexDataConfig":
         if not self.input_dir.is_dir():
             raise ValueError(f"input_dir does not exist: {self.input_dir}")
-        if self.label_dir is not None and not self.label_dir.is_dir():
+        if not self.label_dir.is_dir():
             raise ValueError(f"label_dir does not exist: {self.label_dir}")
         return self
 

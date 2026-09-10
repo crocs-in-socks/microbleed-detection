@@ -86,6 +86,7 @@ def test_index_data_dry_run_does_not_write_manifest(tmp_path: Path) -> None:
         config_path,
         dataset_dir=dataset_dir,
         input_dir=source,
+        label_dir=tmp_path / "first_masks",
     )
 
     result = runner.invoke(
@@ -102,7 +103,6 @@ def test_index_data_rejects_missing_label_dir(tmp_path: Path) -> None:
         config_path,
         label_dir=tmp_path / "missing_labels",
         mask_pattern="{subject_id}_mask.nii.gz",
-        require_masks=True,
     )
 
     result = runner.invoke(app, ["index-data", "--config", str(config_path)])
@@ -125,7 +125,6 @@ def test_index_data_rejects_unmatched_subjects_when_masks_required(
         input_dir=input_dir,
         label_dir=label_dir,
         mask_pattern="{subject_id}_mask.nii.gz",
-        require_masks=True,
     )
 
     result = runner.invoke(app, ["index-data", "--config", str(config_path)])
@@ -170,6 +169,7 @@ def _run_index_data(
         config_path,
         dataset_dir=dataset_dir,
         input_dir=input_dir,
+        label_dir=input_dir.with_name(f"{input_dir.name}_masks"),
         source_id=source_id,
     )
     return runner.invoke(app, ["index-data", "--config", str(config_path)])

@@ -35,9 +35,7 @@ def execute(config: PreprocessConfig) -> None:
         subject_id = subject.subject_id
 
         raw_volume = io.load_volume(subject.volume_path)
-        raw_mask = (
-            io.load_volume(subject.mask_path) if subject.mask_path else None
-        )
+        raw_mask = io.load_volume(subject.mask_path)
 
         modality = cast(Modality, source_modalities[subject.source_id])
         preprocess_result = processor.preprocess(raw_volume, raw_mask, modality)
@@ -50,27 +48,17 @@ def execute(config: PreprocessConfig) -> None:
         )
         io.save_volume(preprocessed_volume, preprocessed_volume_path)
 
-        preprocessed_mask_path = None
-        if raw_mask is not None:
-            if preprocess_result.mask is None:
-                raise ValueError(f"preprocessing returned no mask for {subject_id}")
-            preprocessed_mask = nib.Nifti1Image(
-                preprocess_result.mask, preprocess_result.affine
-            )
-            preprocessed_mask_path = (
-                masks_dir / f"{subject_id}{layout.mask_suffix}"
-            )
-            io.save_volume(preprocessed_mask, preprocessed_mask_path)
+        preprocessed_mask = nib.Nifti1Image(
+            preprocess_result.mask, preprocess_result.affine
+        )
+        preprocessed_mask_path = masks_dir / f"{subject_id}{layout.mask_suffix}"
+        io.save_volume(preprocessed_mask, preprocessed_mask_path)
 
         preprocessed_subjects.append(
             PreprocessedSubject(
                 subject_id=subject_id,
                 volume_path=str(preprocessed_volume_path.resolve()),
-                mask_path=(
-                    str(preprocessed_mask_path.resolve())
-                    if preprocessed_mask_path is not None
-                    else None
-                ),
+                mask_path=str(preprocessed_mask_path.resolve()),
             )
         )
 

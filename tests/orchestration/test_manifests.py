@@ -39,6 +39,7 @@ def test_raw_dataset_manifest_rejects_duplicate_subject_ids() -> None:
         "subject_id": "s1",
         "source_id": "source",
         "volume_path": "/a",
+        "mask_path": "/a-mask",
     }
     with pytest.raises(ValidationError, match="duplicate subject ID"):
         RawDatasetManifest.model_validate(
